@@ -1,0 +1,5 @@
+# Pinned to the versions already proven on your netzero/network-security venvs.
+fastapi==0.135.1
+uvicorn==0.42.0
+websockets==16.0          # required for uvicorn to serve the WebSocket stream
+scapy==2.7.0

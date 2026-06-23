@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="color-scheme" content="dark">
+<title>pi-netzero</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --term:#010409; --border:#30363d;
+    --fg:#c9d1d9; --muted:#8b949e; --blue:#58a6ff; --green:#238636;
+    --green2:#7ee787; --red:#da3633; --red2:#ff7b72; --amber:#d29922;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,monospace;
+    font-size:15px;-webkit-tap-highlight-color:transparent}
+  header{position:sticky;top:0;z-index:10;background:var(--panel);
+    border-bottom:1px solid var(--border);padding:10px 14px;
+    display:flex;align-items:center;justify-content:space-between;gap:8px}
+  h1{margin:0;font-size:17px;color:var(--blue);letter-spacing:.5px}
+  .badges{display:flex;gap:6px;align-items:center}
+  .badge{font-size:11px;padding:3px 8px;border-radius:20px;border:1px solid var(--border);
+    text-transform:uppercase;letter-spacing:.5px}
+  #conn{color:var(--red2);border-color:var(--red2)}
+  #conn.ok{color:var(--green2);border-color:var(--green2)}
+  #task{color:var(--amber);border-color:var(--amber)}
+  main{padding:12px;display:flex;flex-direction:column;gap:14px;max-width:760px;margin:0 auto}
+  section{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .sec-head{padding:9px 12px;font-size:12px;color:var(--muted);text-transform:uppercase;
+    letter-spacing:1px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between}
+  .sec-body{padding:12px}
+  .row{display:flex;flex-wrap:wrap;gap:8px}
+  button{flex:1 1 auto;min-width:120px;background:var(--green);color:#fff;border:none;
+    padding:13px 14px;font-weight:700;font-size:14px;border-radius:8px;cursor:pointer;
+    font-family:inherit}
+  button:active{opacity:.75}
+  button:disabled{opacity:.35}
+  button.stop{background:var(--red)}
+  button.ghost{background:#21262d;color:var(--fg)}
+  button.amber{background:var(--amber);color:#1b1100}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--border);white-space:nowrap}
+  th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase}
+  tbody tr{cursor:pointer}
+  tbody tr.sel{background:#173a5e}
+  .pwr{color:var(--green2)}
+  .scroll{max-height:34vh;overflow:auto}
+  #target{font-size:13px;color:var(--muted)}
+  #target b{color:var(--blue)}
+  #term{background:var(--term);height:30vh;overflow-y:auto;white-space:pre-wrap;
+    font-family:'Courier New',monospace;font-size:12.5px;padding:12px;line-height:1.5}
+  .l-status{color:var(--muted);font-style:italic}
+  .l-info{color:var(--green2)}
+  .l-error{color:var(--red2)}
+  a.dl{color:var(--blue);text-decoration:none;display:block;padding:8px 0;border-bottom:1px solid var(--border)}
+  .empty{color:var(--muted);font-style:italic;padding:6px 2px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>pi-netzero</h1>
+  <div class="badges">
+    <span id="task" class="badge">idle</span>
+    <span id="conn" class="badge">offline</span>
+  </div>
+</header>
+
+<main>
+  <!-- controls -->
+  <section>
+    <div class="sec-head">Control</div>
+    <div class="sec-body row">
+      <button id="btn-scan" onclick="scanNetworks()">Scan Networks</button>
+      <button class="stop" onclick="stop()">Stop</button>
+      <button class="ghost" onclick="clearLog()">Clear Log</button>
+    </div>
+  </section>
+
+  <!-- target + actions -->
+  <section>
+    <div class="sec-head">Target</div>
+    <div class="sec-body">
+      <p id="target">Tap a network below to select a target.</p>
+      <div class="row" style="margin-top:6px">
+        <button class="ghost" id="a-clients" disabled onclick="scanClients()">Scan Clients</button>
+        <button class="amber" id="a-hs" disabled onclick="handshake()">Handshake</button>
+        <button class="amber" id="a-pmkid" disabled onclick="pmkid()">PMKID</button>
+        <button class="stop" id="a-deauth" disabled onclick="deauth()">Deauth</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- networks -->
+  <section>
+    <div class="sec-head"><span>Networks</span><span id="net-count">0</span></div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>SSID</th><th>CH</th><th>PWR</th><th>ENC</th><th>BSSID</th></tr></thead>
+        <tbody id="networks"></tbody>
+      </table>
+      <div id="net-empty" class="empty" style="padding:12px">No networks yet — run a scan.</div>
+    </div>
+  </section>
+
+  <!-- clients -->
+  <section>
+    <div class="sec-head"><span>Clients</span><span id="cli-count">0</span></div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>CLIENT MAC</th><th>PWR</th></tr></thead>
+        <tbody id="clients"></tbody>
+      </table>
+      <div id="cli-empty" class="empty" style="padding:12px">Select a network, then “Scan Clients”.</div>
+    </div>
+  </section>
+
+  <!-- log -->
+  <section>
+    <div class="sec-head">Log</div>
+    <div id="term"></div>
+  </section>
+
+  <!-- captures -->
+  <section>
+    <div class="sec-head"><span>Captures</span><button class="ghost" style="flex:0;min-width:auto;padding:4px 10px;font-size:11px" onclick="loadCaptures()">Refresh</button></div>
+    <div class="sec-body" id="captures"><div class="empty">No captures yet.</div></div>
+  </section>
+</main>
+
+<script>
+const host = location.host;
+const api = (p)=>`http://${host}/api/v1${p}`;
+const $ = (id)=>document.getElementById(id);
+
+let networks = {};        // bssid -> info
+let selNet = null;        // selected network
+let selClient = null;     // selected client mac
+let ws;
+
+// ---- websocket ----
+function connect(){
+  ws = new WebSocket(`ws://${host}/ws/v1/stream`);
+  ws.onopen = ()=>{ setConn(true); };
+  ws.onclose = ()=>{ setConn(false); setTimeout(connect, 2500); };
+  ws.onmessage = (e)=>handle(JSON.parse(e.data));
+}
+function setConn(ok){
+  const c=$('conn'); c.textContent = ok?'online':'offline'; c.classList.toggle('ok',ok);
+}
+function setTask(t){
+  $('task').textContent = t;
+  const idle = t==='idle';
+  $('btn-scan').disabled = !idle;
+  refreshActions();
+}
+
+function handle(m){
+  switch(m.type){
+    case 'state':   setTask(m.state.task); break;
+    case 'task':    setTask(m.task); if(m.task==='idle') loadCaptures(); break;
+    case 'status':  logLine(m.status,'l-status'); break;
+    case 'log':     logLine(m.msg, m.level==='error'?'l-error':'l-info'); break;
+    case 'network': addNetwork(m.network); break;
+    case 'client':  addClient(m.client); break;
+    case 'capture':
+      logLine(m.ok?`✓ ${m.kind} saved: ${m.file}`:`✗ ${m.kind} failed`, m.ok?'l-info':'l-error');
+      loadCaptures(); break;
+  }
+}
+
+// ---- networks ----
+function addNetwork(n){
+  const fresh = !networks[n.bssid];
+  networks[n.bssid]=n;
+  if(fresh) renderNetworks();
+}
+function renderNetworks(){
+  const rows = Object.values(networks).sort((a,b)=>b.pwr-a.pwr);
+  $('net-count').textContent = rows.length;
+  $('net-empty').style.display = rows.length?'none':'block';
+  $('networks').innerHTML = rows.map(n=>`
+    <tr onclick='selectNet(${JSON.stringify(n.bssid)})' class="${selNet&&selNet.bssid===n.bssid?'sel':''}">
+      <td>${esc(n.ssid)}</td><td>${n.channel}</td>
+      <td class="pwr">${n.pwr}</td><td>${esc(n.crypto)}</td>
+      <td style="color:var(--muted)">${n.bssid}</td>
+    </tr>`).join('');
+}
+function selectNet(bssid){
+  selNet = networks[bssid]; selClient=null;
+  $('clients').innerHTML=''; $('cli-count').textContent=0; $('cli-empty').style.display='block';
+  $('target').innerHTML = `<b>${esc(selNet.ssid)}</b> · ${selNet.bssid} · ch ${selNet.channel} · ${esc(selNet.crypto)}`;
+  renderNetworks(); refreshActions();
+}
+
+// ---- clients ----
+function addClient(c){
+  $('cli-empty').style.display='none';
+  $('cli-count').textContent = c.idx;
+  const tr=document.createElement('tr');
+  tr.onclick=()=>selectClient(c.mac, tr);
+  tr.innerHTML=`<td>${c.mac}</td><td class="pwr">${c.pwr}</td>`;
+  $('clients').appendChild(tr);
+}
+function selectClient(mac, tr){
+  selClient = (selClient===mac)?null:mac;
+  [...$('clients').children].forEach(r=>r.classList.remove('sel'));
+  if(selClient) tr.classList.add('sel');
+  refreshActions();
+  $('target').innerHTML = selNet
+    ? `<b>${esc(selNet.ssid)}</b> · ${selNet.bssid} · ch ${selNet.channel}` +
+      (selClient?` → client <b>${selClient}</b>`:``)
+    : $('target').innerHTML;
+}
+
+function refreshActions(){
+  const idle = $('task').textContent==='idle';
+  const hasNet = !!selNet;
+  $('a-clients').disabled = !(idle&&hasNet);
+  $('a-hs').disabled      = !(idle&&hasNet);
+  $('a-pmkid').disabled   = !(idle&&hasNet);
+  $('a-deauth').disabled  = !(idle&&hasNet);
+  $('a-deauth').textContent = selClient?'Deauth Client':'Deauth All';
+  $('a-hs').textContent = selClient?'Handshake (client)':'Handshake';
+}
+
+// ---- actions ----
+async function post(path, body){
+  try{
+    const r = await fetch(api(path), {method:'POST',
+      headers:{'Content-Type':'application/json'}, body: body?JSON.stringify(body):null});
+    const d = await r.json();
+    if(!r.ok) logLine(`[error] ${d.detail||r.status}`,'l-error');
+  }catch(e){ logLine('[error] request failed','l-error'); }
+}
+const scanNetworks = ()=>post('/scan/networks/start');
+const stop = ()=>post('/stop');
+const scanClients = ()=> selNet && post('/scan/clients/start',{bssid:selNet.bssid,channel:selNet.channel});
+const deauth = ()=> selNet && post('/attack/deauth',{bssid:selNet.bssid,channel:selNet.channel,client:selClient});
+const handshake = ()=> selNet && post('/attack/handshake',
+  {bssid:selNet.bssid,channel:selNet.channel,client:selClient,ssid:selNet.ssid});
+const pmkid = ()=> selNet && post('/attack/pmkid',{bssid:selNet.bssid,ssid:selNet.ssid,channel:selNet.channel});
+
+// ---- captures ----
+async function loadCaptures(){
+  try{
+    const r = await fetch(api('/captures')); const d = await r.json();
+    const el = $('captures');
+    if(!d.captures.length){ el.innerHTML='<div class="empty">No captures yet.</div>'; return; }
+    el.innerHTML = d.captures.map(c=>
+      `<a class="dl" href="${api('/captures/'+encodeURIComponent(c.name))}" download>⬇ ${c.name} <span style="color:var(--muted)">(${(c.size/1024).toFixed(1)} KB)</span></a>`
+    ).join('');
+  }catch(e){}
+}
+
+// ---- log ----
+function logLine(text, cls){
+  const t=$('term'); const d=document.createElement('div');
+  d.className=cls; d.textContent=text; t.appendChild(d); t.scrollTop=t.scrollHeight;
+  while(t.children.length>500) t.removeChild(t.firstChild);
+}
+function clearLog(){ $('term').innerHTML=''; }
+function esc(s){ return (s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+connect();
+loadCaptures();
+</script>
+</body>
+</html>

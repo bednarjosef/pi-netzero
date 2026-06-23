@@ -1,0 +1,14 @@
+[Unit]
+Description=pi-netzero USB-Ethernet gadget (RNDIS) + DHCP for usb0
+After=sys-kernel-config.mount
+Wants=sys-kernel-config.mount
+Before=pi-netzero.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/pi-netzero/deploy/usb_gadget.sh up
+ExecStop=/opt/pi-netzero/deploy/usb_gadget.sh down
+
+[Install]
+WantedBy=multi-user.target

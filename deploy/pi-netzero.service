@@ -1,0 +1,15 @@
+[Unit]
+Description=pi-netzero Wi-Fi recon server
+After=network.target pi-netzero-usb.service
+Wants=pi-netzero-usb.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/pi-netzero
+ExecStart=/opt/pi-netzero/.venv/bin/python /opt/pi-netzero/main.py
+Restart=on-failure
+RestartSec=3
+# Runs as root: needs raw sockets for scapy and control of the Wi-Fi radio.
+
+[Install]
+WantedBy=multi-user.target
