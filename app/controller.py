@@ -78,6 +78,9 @@ class NetZero:
     def network_list(self):
         return sorted(self.networks.values(), key=lambda n: n["pwr"], reverse=True)
 
+    def client_list(self):
+        return sorted(self.clients.values(), key=lambda c: c["pwr"], reverse=True)
+
     # --- lifecycle ------------------------------------------------------------
     def _launch(self, task, target, args=()):
         if not self.is_idle():
@@ -110,13 +113,11 @@ class NetZero:
     def _scan_networks(self):
         self.networks = {}
         self.status("Scanning for networks on all channels…")
+        # Sniff in short bursts so Stop is responsive even on a silent channel
+        # (a plain blocking sniff() only checks the stop flag when a frame arrives).
         with channel_hopper(CHANNEL_HOP_DELAY, self.iface):
-            sniff(
-                iface=self.iface,
-                prn=self._on_beacon,
-                store=False,
-                stop_filter=lambda p: self._stop.is_set(),
-            )
+            while not self._stop.is_set():
+                sniff(iface=self.iface, prn=self._on_beacon, store=False, timeout=1)
         self.status(f"Scan finished — {len(self.networks)} networks.")
 
     def _on_beacon(self, packet: Packet):
@@ -150,12 +151,10 @@ class NetZero:
         self.clients = {}
         set_channel(channel, self.iface)
         self.status(f"Scanning for clients of {bssid} on ch {channel}…")
-        sniff(
-            iface=self.iface,
-            prn=lambda p: self._on_data_frame(p, bssid, channel),
-            store=False,
-            stop_filter=lambda p: self._stop.is_set(),
-        )
+        # Burst-sniff so Stop responds within ~1s even if the channel is quiet.
+        while not self._stop.is_set():
+            sniff(iface=self.iface, prn=lambda p: self._on_data_frame(p, bssid, channel),
+                  store=False, timeout=1)
         self.status(f"Client scan finished — {len(self.clients)} clients.")
 
     def _on_data_frame(self, packet: Packet, target_bssid, channel):

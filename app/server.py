@@ -111,6 +111,8 @@ async def stream(ws: WebSocket):
     await ws.send_text(json.dumps({"type": "state", "state": netzero.state()}))
     for n in netzero.network_list():
         await ws.send_text(json.dumps({"type": "network", "network": n}))
+    for c in netzero.client_list():
+        await ws.send_text(json.dumps({"type": "client", "client": c}))
     try:
         while True:
             await ws.receive_text()
@@ -240,7 +242,14 @@ def crack_instances():
         "id": i.get("id"), "label": i.get("label"),
         "status": i.get("actual_status") or i.get("cur_state"),
         "dph": round(i.get("dph_total", 0) or 0, 3), "gpu": i.get("gpu_name"),
+        "location": i.get("geolocation"),
     } for i in ins if str(i.get("label", "")).startswith("pinetzero-")]
+    # Reconcile: a hash still marked "cracking" whose instance has self-destructed
+    # is finished — flip it so the UI doesn't show it cracking forever.
+    live = {i["id"] for i in ours}
+    for h in netzero.store.list():
+        if h.get("status") == "cracking" and h.get("instance_id") not in live:
+            netzero.store.update(h["name"], status="finished")
     return {"instances": ours, "vast": True}
 
 

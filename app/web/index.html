@@ -28,11 +28,19 @@
   /* ---------- top bar ---------- */
   header{
     position:sticky; top:0; z-index:20;
-    padding:calc(10px + var(--safe-t)) 16px 10px;
-    background:linear-gradient(180deg,var(--bg2),rgba(13,18,27,.86));
+    padding:calc(10px + var(--safe-t)) 14px 10px;
+    background:linear-gradient(180deg,var(--bg2),rgba(13,18,27,.92));
     backdrop-filter:blur(10px); border-bottom:1px solid var(--line);
-    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    display:flex; flex-direction:column; gap:9px;
   }
+  .hrow{display:flex; align-items:center; justify-content:space-between; gap:10px}
+  #activity{display:none; align-items:center; gap:10px; padding:9px 12px; border-radius:11px;
+    background:rgba(251,191,36,.12); border:1px solid rgba(251,191,36,.4); color:var(--amber); font-weight:650; font-size:13.5px}
+  #activity.show{display:flex}
+  #activity button{padding:8px 16px; font-size:13px}
+  .spin{width:15px;height:15px;border:2px solid rgba(251,191,36,.3);border-top-color:var(--amber);
+    border-radius:50%;animation:spin .8s linear infinite;flex:0 0 auto}
+  @keyframes spin{to{transform:rotate(360deg)}}
   .brand{display:flex; align-items:center; gap:9px; font-weight:700; letter-spacing:.3px}
   .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
   .brand b{color:var(--cyan)} .brand span{color:var(--muted);font-weight:600}
@@ -140,10 +148,17 @@
 <body>
 
 <header>
-  <div class="brand"><span class="dot"></span><b>pi</b><span>·netzero</span></div>
-  <div class="pills">
-    <span id="p-radio" class="pill"><span class="led"></span>radio</span>
-    <span id="p-link" class="pill"><span class="led"></span>link</span>
+  <div class="hrow">
+    <div class="brand"><span class="dot"></span><b>pi</b><span>·netzero</span></div>
+    <div class="pills">
+      <span id="p-radio" class="pill"><span class="led"></span>radio</span>
+      <span id="p-link" class="pill"><span class="led"></span>link</span>
+    </div>
+  </div>
+  <div id="activity">
+    <span class="spin"></span>
+    <span id="act-label" class="grow">Working…</span>
+    <button class="red sm" onclick="stopTask()">Stop</button>
   </div>
 </header>
 
@@ -225,7 +240,9 @@
 <script>
 const host = location.host, api = p => `http://${host}/api/v1${p}`;
 const $ = id => document.getElementById(id);
-let networks = {}, selNet = null, selClient = null, ws, scanning = false;
+let networks = {}, selNet = null, selClient = null, ws, scanning = false, curTask='idle', radioOn=false;
+const TASK_LABEL = {scan_networks:'Scanning networks…', scan_clients:'Scanning clients…',
+  handshake:'Capturing handshake…', pmkid:'Soliciting PMKID…', deauth:'Sending deauth…'};
 
 // ---------- websocket ----------
 function connect(){
@@ -249,15 +266,19 @@ function handle(m){
       upsertHash(m.hash); toast('🔓 hash extracted: '+m.hash.ssid); break;
   }
 }
-function applyState(s){ setTask(s.task); setPill('p-radio', s.monitor?'on':'', 'radio'); }
+function applyState(s){ radioOn = !!s.monitor; setTask(s.task); }
 function setTask(t){
+  curTask = t || 'idle';
   scanning = (t==='scan_networks');
   $('scan-label').textContent = scanning?'Stop Scan':'Scan Networks';
   $('btn-scan').classList.toggle('green',!scanning); $('btn-scan').classList.toggle('red',scanning);
   const busy = t && t!=='idle';
-  $('p-radio').className = 'pill ' + (busy?'busy':($('p-radio').classList.contains('on')?'on':''));
+  $('activity').classList.toggle('show', busy);
+  if(busy) $('act-label').textContent = TASK_LABEL[t] || ('Running: '+t.replace('_',' '));
+  $('p-radio').className = 'pill ' + (busy?'busy':(radioOn?'on':''));
   $('p-radio').lastChild.textContent = busy? t.replace('_',' ') : 'radio';
 }
+function stopTask(){ post('/stop'); $('act-label').textContent='Stopping…'; }
 function setPill(id,cls,label){ const e=$(id); e.className='pill '+cls; e.lastChild.textContent=label; }
 
 // ---------- networks ----------
@@ -340,20 +361,24 @@ async function loadCaps(){
 }
 
 // ---------- hashes / cracking ----------
-let hashes = {}, vastOn = false;
+let hashes = {}, vastOn = false, hashTimer = null;
 async function loadHashes(){
   try{
+    // fetch instances first — that endpoint reconciles stale "cracking" statuses
+    let inst = {instances:[]};
+    try{ inst = await (await fetch(api('/crack/instances'))).json(); }catch(e){}
     const d = await (await fetch(api('/hashes'))).json();
     vastOn = d.vast; hashes = {}; d.hashes.forEach(h=>hashes[h.name]=h);
     $('ntfy-topic').textContent = d.ntfy;
     $('vast-warn').style.display = d.vast?'none':'block';
-    renderHashes(); loadInstances();
+    renderHashes(); renderInstances(inst.instances||[]);
   }catch(e){}
 }
 function upsertHash(h){ hashes[h.name]=h; renderHashes(); }
 function statusTag(h){
-  if(h.status==='cracked') return `<span class="tag wpa2">CRACKED</span>`;
-  if(h.status==='cracking') return `<span class="tag wpa">cracking…</span>`;
+  if(h.status==='cracked')   return `<span class="tag wpa2">CRACKED</span>`;
+  if(h.status==='cracking')  return `<span class="tag wpa">cracking…</span>`;
+  if(h.status==='finished')  return `<span class="tag wpa3">finished · check ntfy</span>`;
   if(h.status==='exhausted') return `<span class="tag opn">not found</span>`;
   return `<span class="tag wpa3">ready</span>`;
 }
@@ -361,44 +386,43 @@ function renderHashes(){
   const rows = Object.values(hashes).sort((a,b)=>b.captured_at-a.captured_at);
   $('hash-count').textContent = rows.length;
   $('hash-empty').style.display = rows.length?'none':'block';
-  $('hashes').innerHTML = rows.map(h=>`
-    <div class="cap">
+  $('hashes').innerHTML = rows.map(h=>{
+    const crackable = ['captured','finished','exhausted'].includes(h.status);
+    return `<div class="cap">
       <span class="ci">${h.kind==='pmkid'?'🔑':'🤝'}</span>
       <div class="cm">
         <div class="cn" style="font-family:inherit;font-weight:650">${esc(h.ssid)}</div>
         <div class="cs">${h.kind} · ${statusTag(h)} ${h.password?`<b class="mono" style="color:var(--green)">${esc(h.password)}</b>`:''}</div>
       </div>
-      ${h.status==='captured'
+      ${crackable
         ? `<button class="violet sm" ${vastOn?'':'disabled'} onclick="crack('${h.name}')">⚡ Crack</button>`
         : `<a href="${api('/hashes/'+encodeURIComponent(h.name))}" download>↓</a>`}
-    </div>`).join('');
+    </div>`;}).join('');
 }
 function crack(name){
   const h = hashes[name];
-  if(!confirm('⚠ Only crack networks you OWN or are authorized to test.\n\nSpin up a GPU on Vast.ai to crack "'+h.ssid+'"?\nrockyou → 8-digit numbers → all-h.txt (auto-kills after ~3h).')) return;
+  if(!confirm('⚠ Only crack networks you OWN or are authorized to test.\n\nSpin up a GPU on Vast.ai to crack "'+h.ssid+'"?\nrockyou → 8-digit numbers → all-h.txt (auto-kills ~3h).')) return;
   toast('launching GPU…');
   fetch(api('/crack/'+encodeURIComponent(name)),{method:'POST'})
     .then(r=>r.json().then(d=>({ok:r.ok,d})))
-    .then(({ok,d})=>{ toast(ok?(d.message||'launched'):(d.detail||'failed'),ok?0:1); if(ok){hashes[name].status='cracking';renderHashes();loadInstances();} })
-    .catch(()=>toast('launch failed',1));
+    .then(({ok,d})=>{ toast(ok?(d.message||'launched'):(d.detail||'failed')); if(ok){ if(hashes[name])hashes[name].status='cracking'; renderHashes(); setTimeout(loadHashes,1500);} })
+    .catch(()=>toast('launch failed'));
 }
-async function loadInstances(){
-  if(!vastOn) return;
-  try{
-    const d = await (await fetch(api('/crack/instances'))).json();
-    const box=$('inst-card');
-    if(!d.instances.length){ box.style.display='none'; return; }
-    box.style.display='block';
-    $('instances').innerHTML = d.instances.map(i=>`
-      <div class="cap"><span class="ci">🖥️</span>
-        <div class="cm"><div class="cn" style="font-family:inherit">${esc(i.gpu||'GPU')} · $${i.dph}/hr</div>
-          <div class="cs">${esc(i.status||'…')} · ${esc(i.label||'')}</div></div>
-        <button class="red sm" onclick="destroyInst(${i.id})">Kill</button></div>`).join('');
-  }catch(e){}
+function renderInstances(list){
+  const box=$('inst-card');
+  if(!list.length){ box.style.display='none'; $('instances').innerHTML=''; return; }
+  box.style.display='block';
+  $('instances').innerHTML = list.map(i=>`
+    <div class="cap"><span class="ci">🖥️</span>
+      <div class="cm">
+        <div class="cn" style="font-family:inherit">${esc(i.gpu||'GPU')} · $${i.dph}/hr ${i.location?'· 📍 '+esc(i.location):''}</div>
+        <div class="cs">${esc(i.status||'starting…')} · ${esc((i.label||'').replace('pinetzero-',''))}</div>
+      </div>
+      <button class="red sm" onclick="destroyInst(${i.id})">Kill</button></div>`).join('');
 }
 function destroyInst(id){
-  if(!confirm('Destroy GPU instance '+id+'? (stops billing)')) return;
-  fetch(api('/crack/instances/'+id),{method:'DELETE'}).then(()=>{ toast('destroyed'); loadInstances(); });
+  if(!confirm('Destroy GPU instance '+id+'? (stops billing immediately)')) return;
+  fetch(api('/crack/instances/'+id),{method:'DELETE'}).then(()=>{ toast('destroyed'); setTimeout(loadHashes,800); });
 }
 
 // ---------- log / ui ----------
@@ -406,7 +430,9 @@ function log(t,cls){ const l=$('log'); const d=document.createElement('div'); d.
 const sys = t=>log('• '+t,'l-sys'); function clearLog(){ $('log').innerHTML=''; }
 function tab(v){ document.querySelectorAll('.view').forEach(x=>x.classList.remove('active')); $('v-'+v).classList.add('active');
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b.dataset.v===v));
-  if(v==='hash') loadHashes(); if(v==='caps') loadCaps(); }
+  clearInterval(hashTimer); hashTimer=null;
+  if(v==='hash'){ loadHashes(); hashTimer=setInterval(loadHashes, 12000); }   // live job/status refresh
+  if(v==='caps') loadCaps(); }
 let toastT; function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2200); }
 function esc(s){ return (s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 
