@@ -2,269 +2,329 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
 <meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0a0e14">
 <title>pi-netzero</title>
 <style>
   :root{
-    --bg:#0d1117; --panel:#161b22; --term:#010409; --border:#30363d;
-    --fg:#c9d1d9; --muted:#8b949e; --blue:#58a6ff; --green:#238636;
-    --green2:#7ee787; --red:#da3633; --red2:#ff7b72; --amber:#d29922;
+    --bg:#0a0e14; --bg2:#0d121b; --card:#131a26; --card2:#19222f;
+    --line:#222d3d; --line2:#2c3a4f;
+    --fg:#e3e9f2; --muted:#8a97a8; --dim:#5b6675;
+    --cyan:#22d3ee; --green:#34d399; --amber:#fbbf24; --red:#f87171;
+    --blue:#60a5fa; --violet:#a78bfa;
+    --safe-b:env(safe-area-inset-bottom,0px); --safe-t:env(safe-area-inset-top,0px);
   }
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--fg);
-    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,monospace;
-    font-size:15px;-webkit-tap-highlight-color:transparent}
-  header{position:sticky;top:0;z-index:10;background:var(--panel);
-    border-bottom:1px solid var(--border);padding:10px 14px;
-    display:flex;align-items:center;justify-content:space-between;gap:8px}
-  h1{margin:0;font-size:17px;color:var(--blue);letter-spacing:.5px}
-  .badges{display:flex;gap:6px;align-items:center}
-  .badge{font-size:11px;padding:3px 8px;border-radius:20px;border:1px solid var(--border);
-    text-transform:uppercase;letter-spacing:.5px}
-  #conn{color:var(--red2);border-color:var(--red2)}
-  #conn.ok{color:var(--green2);border-color:var(--green2)}
-  #task{color:var(--amber);border-color:var(--amber)}
-  main{padding:12px;display:flex;flex-direction:column;gap:14px;max-width:760px;margin:0 auto}
-  section{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden}
-  .sec-head{padding:9px 12px;font-size:12px;color:var(--muted);text-transform:uppercase;
-    letter-spacing:1px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between}
-  .sec-body{padding:12px}
-  .row{display:flex;flex-wrap:wrap;gap:8px}
-  button{flex:1 1 auto;min-width:120px;background:var(--green);color:#fff;border:none;
-    padding:13px 14px;font-weight:700;font-size:14px;border-radius:8px;cursor:pointer;
-    font-family:inherit}
-  button:active{opacity:.75}
-  button:disabled{opacity:.35}
-  button.stop{background:var(--red)}
-  button.ghost{background:#21262d;color:var(--fg)}
-  button.amber{background:var(--amber);color:#1b1100}
-  table{width:100%;border-collapse:collapse;font-size:13px}
-  th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--border);white-space:nowrap}
-  th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase}
-  tbody tr{cursor:pointer}
-  tbody tr.sel{background:#173a5e}
-  .pwr{color:var(--green2)}
-  .scroll{max-height:34vh;overflow:auto}
-  #target{font-size:13px;color:var(--muted)}
-  #target b{color:var(--blue)}
-  #term{background:var(--term);height:30vh;overflow-y:auto;white-space:pre-wrap;
-    font-family:'Courier New',monospace;font-size:12.5px;padding:12px;line-height:1.5}
-  .l-status{color:var(--muted);font-style:italic}
-  .l-info{color:var(--green2)}
-  .l-error{color:var(--red2)}
-  a.dl{color:var(--blue);text-decoration:none;display:block;padding:8px 0;border-bottom:1px solid var(--border)}
-  .empty{color:var(--muted);font-style:italic;padding:6px 2px}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Inter,sans-serif;
+    font-size:15px; line-height:1.45; overscroll-behavior:none;
+    display:flex; flex-direction:column; height:100dvh;
+  }
+  .mono{font-family:ui-monospace,'SF Mono','Roboto Mono',Menlo,monospace}
+
+  /* ---------- top bar ---------- */
+  header{
+    position:sticky; top:0; z-index:20;
+    padding:calc(10px + var(--safe-t)) 16px 10px;
+    background:linear-gradient(180deg,var(--bg2),rgba(13,18,27,.86));
+    backdrop-filter:blur(10px); border-bottom:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+  }
+  .brand{display:flex; align-items:center; gap:9px; font-weight:700; letter-spacing:.3px}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  .brand b{color:var(--cyan)} .brand span{color:var(--muted);font-weight:600}
+  .pills{display:flex; gap:6px; align-items:center}
+  .pill{font-size:11px;font-weight:600;padding:4px 9px;border-radius:999px;border:1px solid var(--line2);
+    color:var(--muted);display:flex;align-items:center;gap:5px;white-space:nowrap}
+  .pill .led{width:7px;height:7px;border-radius:50%;background:var(--dim)}
+  .pill.on{color:var(--green);border-color:rgba(52,211,153,.4)} .pill.on .led{background:var(--green);box-shadow:0 0 7px var(--green)}
+  .pill.busy{color:var(--amber);border-color:rgba(251,191,36,.4)} .pill.busy .led{background:var(--amber);box-shadow:0 0 7px var(--amber);animation:pulse 1s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+
+  /* ---------- content ---------- */
+  main{flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:14px 14px 90px}
+  .view{display:none; flex-direction:column; gap:12px} .view.active{display:flex}
+  .row{display:flex; gap:10px}
+  .grow{flex:1}
+
+  /* ---------- buttons ---------- */
+  button{font-family:inherit; font-size:15px; font-weight:650; border:none; border-radius:13px;
+    padding:14px 16px; cursor:pointer; color:#04121a; background:var(--cyan);
+    display:flex; align-items:center; justify-content:center; gap:8px; transition:transform .06s,opacity .15s}
+  button:active{transform:scale(.97)} button:disabled{opacity:.4}
+  button.ghost{background:var(--card2); color:var(--fg); border:1px solid var(--line2)}
+  button.green{background:var(--green)} button.amber{background:var(--amber);color:#1a1304}
+  button.red{background:var(--red);color:#1a0606} button.violet{background:var(--violet);color:#0c0720}
+  button.sm{padding:9px 13px;font-size:13px;border-radius:10px}
+  button .ic{font-size:17px;line-height:1}
+
+  /* ---------- cards / sections ---------- */
+  .card{background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden}
+  .card-h{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid var(--line)}
+  .card-h h2{margin:0;font-size:12px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .card-b{padding:12px 14px}
+  .count{font-size:12px;color:var(--dim);font-weight:700}
+
+  /* ---------- network list ---------- */
+  .list{display:flex;flex-direction:column}
+  .net{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--line);cursor:pointer;transition:background .12s}
+  .net:last-child{border-bottom:none}
+  .net:active{background:var(--card2)}
+  .net.sel{background:linear-gradient(90deg,rgba(34,211,238,.13),transparent);box-shadow:inset 3px 0 0 var(--cyan)}
+  .sig{width:26px;display:flex;align-items:flex-end;justify-content:center;gap:2px;height:22px}
+  .sig i{width:4px;border-radius:1px;background:var(--dim)}
+  .sig i.on{background:var(--green)} .sig.w i.on{background:var(--amber)} .sig.x i.on{background:var(--red)}
+  .net-main{flex:1;min-width:0}
+  .net-ssid{font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .net-ssid.hidden{color:var(--dim);font-style:italic}
+  .net-sub{display:flex;gap:7px;align-items:center;margin-top:3px;font-size:11.5px;color:var(--muted)}
+  .net-sub .bssid{font-family:ui-monospace,monospace;color:var(--dim)}
+  .tag{font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px;letter-spacing:.3px}
+  .tag.wpa3{background:rgba(96,165,250,.16);color:var(--blue)}
+  .tag.wpa2{background:rgba(52,211,153,.15);color:var(--green)}
+  .tag.wpa{background:rgba(251,191,36,.15);color:var(--amber)}
+  .tag.wep,.tag.opn{background:rgba(248,113,113,.16);color:var(--red)}
+  .dbm{margin-left:auto;font-family:ui-monospace,monospace;font-size:12px;color:var(--muted);font-weight:600}
+  .empty{padding:26px 14px;text-align:center;color:var(--dim);font-size:13.5px}
+
+  /* ---------- target sheet ---------- */
+  #target{position:fixed;left:0;right:0;bottom:0;z-index:30;transform:translateY(110%);
+    transition:transform .25s cubic-bezier(.3,.8,.3,1);
+    background:var(--card2);border-top:1px solid var(--line2);
+    border-radius:20px 20px 0 0;padding:14px 16px calc(16px + var(--safe-b));
+    box-shadow:0 -16px 40px rgba(0,0,0,.5)}
+  #target.up{transform:translateY(0)}
+  .t-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .t-grab{position:absolute;top:7px;left:50%;transform:translateX(-50%);width:38px;height:4px;border-radius:99px;background:var(--line2)}
+  .t-info{flex:1;min-width:0}
+  .t-info .s{font-weight:700;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .t-info .m{font-size:12px;color:var(--muted);margin-top:2px}
+  .t-x{width:34px;height:34px;border-radius:50%;background:var(--card);color:var(--muted);padding:0;flex:0 0 auto}
+  .t-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .t-grid button{padding:13px 10px;font-size:14px}
+  .t-clients{margin-top:10px;max-height:30vh;overflow-y:auto}
+  .cli{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--line)}
+  .cli .mac{font-family:ui-monospace,monospace;font-size:13px;flex:1}
+  .cli.sel{color:var(--cyan)}
+
+  /* ---------- log ---------- */
+  #log{background:#05080d;border:1px solid var(--line);border-radius:14px;
+    height:62vh;overflow-y:auto;padding:12px;font-family:ui-monospace,monospace;font-size:12.5px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+  .l-status{color:var(--muted)} .l-info{color:var(--green)} .l-err{color:var(--red)} .l-sys{color:var(--blue)}
+
+  /* ---------- captures ---------- */
+  .cap{display:flex;align-items:center;gap:11px;padding:12px 14px;border-bottom:1px solid var(--line)}
+  .cap:last-child{border:none}
+  .cap .ci{font-size:20px}
+  .cap .cm{flex:1;min-width:0}
+  .cap .cn{font-family:ui-monospace,monospace;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cap .cs{font-size:11px;color:var(--dim);margin-top:2px}
+  .cap a{color:var(--cyan);text-decoration:none;font-weight:700;font-size:13px;padding:7px 11px;background:var(--card2);border-radius:9px}
+
+  /* ---------- bottom nav ---------- */
+  nav{position:fixed;bottom:0;left:0;right:0;z-index:25;display:flex;
+    padding-bottom:var(--safe-b);background:rgba(13,18,27,.92);backdrop-filter:blur(12px);border-top:1px solid var(--line)}
+  nav button{flex:1;flex-direction:column;gap:3px;background:none;color:var(--dim);border-radius:0;padding:9px 0 8px;font-size:10.5px;font-weight:600}
+  nav button .ic{font-size:20px;filter:grayscale(1) opacity(.7)}
+  nav button.active{color:var(--cyan)} nav button.active .ic{filter:none}
+  nav button .badge{position:absolute;top:5px;margin-left:18px;background:var(--cyan);color:#04121a;font-size:9px;font-weight:800;min-width:15px;height:15px;border-radius:99px;padding:0 4px;display:flex;align-items:center;justify-content:center}
+  .toast{position:fixed;left:50%;bottom:calc(78px + var(--safe-b));transform:translateX(-50%) translateY(20px);
+    background:var(--card2);border:1px solid var(--line2);color:var(--fg);padding:11px 16px;border-radius:12px;
+    font-size:13px;font-weight:600;opacity:0;transition:.25s;z-index:40;pointer-events:none;max-width:90vw;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
 <body>
 
 <header>
-  <h1>pi-netzero</h1>
-  <div class="badges">
-    <span id="task" class="badge">idle</span>
-    <span id="conn" class="badge">offline</span>
+  <div class="brand"><span class="dot"></span><b>pi</b><span>·netzero</span></div>
+  <div class="pills">
+    <span id="p-radio" class="pill"><span class="led"></span>radio</span>
+    <span id="p-link" class="pill"><span class="led"></span>link</span>
   </div>
 </header>
 
 <main>
-  <!-- controls -->
-  <section>
-    <div class="sec-head">Control</div>
-    <div class="sec-body row">
-      <button id="btn-scan" onclick="scanNetworks()">Scan Networks</button>
-      <button class="stop" onclick="stop()">Stop</button>
-      <button class="ghost" onclick="clearLog()">Clear Log</button>
+  <!-- SCAN -->
+  <section id="v-scan" class="view active">
+    <div class="row">
+      <button id="btn-scan" class="grow green" onclick="toggleScan()"><span class="ic">📡</span><span id="scan-label">Scan Networks</span></button>
+      <button class="ghost" style="flex:0 0 auto" onclick="rescan()" title="clear"><span class="ic">↻</span></button>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Networks</h2><span class="count" id="net-count">0</span></div>
+      <div class="list" id="networks"></div>
+      <div class="empty" id="net-empty">No networks yet — tap <b>Scan</b>.</div>
     </div>
   </section>
 
-  <!-- target + actions -->
-  <section>
-    <div class="sec-head">Target</div>
-    <div class="sec-body">
-      <p id="target">Tap a network below to select a target.</p>
-      <div class="row" style="margin-top:6px">
-        <button class="ghost" id="a-clients" disabled onclick="scanClients()">Scan Clients</button>
-        <button class="amber" id="a-hs" disabled onclick="handshake()">Handshake</button>
-        <button class="amber" id="a-pmkid" disabled onclick="pmkid()">PMKID</button>
-        <button class="stop" id="a-deauth" disabled onclick="deauth()">Deauth</button>
-      </div>
+  <!-- LOG -->
+  <section id="v-log" class="view">
+    <div class="row"><button class="ghost grow sm" onclick="clearLog()">Clear log</button></div>
+    <div id="log"></div>
+  </section>
+
+  <!-- CAPTURES -->
+  <section id="v-caps" class="view">
+    <div class="card">
+      <div class="card-h"><h2>Captures</h2><button class="ghost sm" style="padding:5px 10px" onclick="loadCaps()">Refresh</button></div>
+      <div id="caps"></div>
+      <div class="empty" id="cap-empty">No captures yet. Grab a handshake or PMKID.</div>
     </div>
-  </section>
-
-  <!-- networks -->
-  <section>
-    <div class="sec-head"><span>Networks</span><span id="net-count">0</span></div>
-    <div class="scroll">
-      <table>
-        <thead><tr><th>SSID</th><th>CH</th><th>PWR</th><th>ENC</th><th>BSSID</th></tr></thead>
-        <tbody id="networks"></tbody>
-      </table>
-      <div id="net-empty" class="empty" style="padding:12px">No networks yet — run a scan.</div>
-    </div>
-  </section>
-
-  <!-- clients -->
-  <section>
-    <div class="sec-head"><span>Clients</span><span id="cli-count">0</span></div>
-    <div class="scroll">
-      <table>
-        <thead><tr><th>CLIENT MAC</th><th>PWR</th></tr></thead>
-        <tbody id="clients"></tbody>
-      </table>
-      <div id="cli-empty" class="empty" style="padding:12px">Select a network, then “Scan Clients”.</div>
-    </div>
-  </section>
-
-  <!-- log -->
-  <section>
-    <div class="sec-head">Log</div>
-    <div id="term"></div>
-  </section>
-
-  <!-- captures -->
-  <section>
-    <div class="sec-head"><span>Captures</span><button class="ghost" style="flex:0;min-width:auto;padding:4px 10px;font-size:11px" onclick="loadCaptures()">Refresh</button></div>
-    <div class="sec-body" id="captures"><div class="empty">No captures yet.</div></div>
   </section>
 </main>
 
+<!-- target action sheet -->
+<div id="target">
+  <div class="t-grab"></div>
+  <div class="t-head">
+    <div class="t-info"><div class="s" id="t-ssid">—</div><div class="m" id="t-meta"></div></div>
+    <button class="t-x" onclick="closeTarget()">✕</button>
+  </div>
+  <div class="t-grid">
+    <button class="ghost" onclick="scanClients()"><span class="ic">👥</span>Clients</button>
+    <button class="amber" onclick="grabHandshake()"><span class="ic">🤝</span><span id="hs-label">Handshake</span></button>
+    <button class="amber" onclick="grabPmkid()"><span class="ic">🔑</span>PMKID</button>
+    <button class="red" onclick="deauth()"><span class="ic">⚡</span><span id="deauth-label">Deauth</span></button>
+  </div>
+  <div class="t-clients" id="t-clients"></div>
+</div>
+
+<nav>
+  <button class="active" data-v="scan" onclick="tab('scan')"><span class="ic">📶</span>Scan</button>
+  <button data-v="log" onclick="tab('log')"><span class="ic">📜</span>Log</button>
+  <button data-v="caps" onclick="tab('caps')"><span class="ic">💾</span>Captures</button>
+</nav>
+
+<div class="toast" id="toast"></div>
+
 <script>
-const host = location.host;
-const api = (p)=>`http://${host}/api/v1${p}`;
-const $ = (id)=>document.getElementById(id);
+const host = location.host, api = p => `http://${host}/api/v1${p}`;
+const $ = id => document.getElementById(id);
+let networks = {}, selNet = null, selClient = null, ws, scanning = false;
 
-let networks = {};        // bssid -> info
-let selNet = null;        // selected network
-let selClient = null;     // selected client mac
-let ws;
-
-// ---- websocket ----
+// ---------- websocket ----------
 function connect(){
   ws = new WebSocket(`ws://${host}/ws/v1/stream`);
-  ws.onopen = ()=>{ setConn(true); };
-  ws.onclose = ()=>{ setConn(false); setTimeout(connect, 2500); };
-  ws.onmessage = (e)=>handle(JSON.parse(e.data));
+  ws.onopen = ()=>{ setPill('p-link','on','link'); sys('connected'); };
+  ws.onclose = ()=>{ setPill('p-link','','link'); setTimeout(connect,2500); };
+  ws.onmessage = e => handle(JSON.parse(e.data));
 }
-function setConn(ok){
-  const c=$('conn'); c.textContent = ok?'online':'offline'; c.classList.toggle('ok',ok);
-}
-function setTask(t){
-  $('task').textContent = t;
-  const idle = t==='idle';
-  $('btn-scan').disabled = !idle;
-  refreshActions();
-}
-
 function handle(m){
   switch(m.type){
-    case 'state':   setTask(m.state.task); break;
-    case 'task':    setTask(m.task); if(m.task==='idle') loadCaptures(); break;
-    case 'status':  logLine(m.status,'l-status'); break;
-    case 'log':     logLine(m.msg, m.level==='error'?'l-error':'l-info'); break;
-    case 'network': addNetwork(m.network); break;
-    case 'client':  addClient(m.client); break;
+    case 'state': applyState(m.state); break;
+    case 'task': setTask(m.task); break;
+    case 'status': log(m.status,'l-status'); break;
+    case 'log': log(m.msg, m.level==='error'?'l-err':'l-info'); break;
+    case 'network': addNet(m.network); break;
+    case 'client': addClient(m.client); break;
     case 'capture':
-      logLine(m.ok?`✓ ${m.kind} saved: ${m.file}`:`✗ ${m.kind} failed`, m.ok?'l-info':'l-error');
-      loadCaptures(); break;
+      log(m.ok?`✓ ${m.kind} saved: ${m.file}`:`✗ ${m.kind} failed`, m.ok?'l-info':'l-err');
+      toast(m.ok?`${m.kind} captured ✓`:`${m.kind} failed`); loadCaps(); break;
   }
 }
-
-// ---- networks ----
-function addNetwork(n){
-  const fresh = !networks[n.bssid];
-  networks[n.bssid]=n;
-  if(fresh) renderNetworks();
+function applyState(s){ setTask(s.task); setPill('p-radio', s.monitor?'on':'', 'radio'); }
+function setTask(t){
+  scanning = (t==='scan_networks');
+  $('scan-label').textContent = scanning?'Stop Scan':'Scan Networks';
+  $('btn-scan').classList.toggle('green',!scanning); $('btn-scan').classList.toggle('red',scanning);
+  const busy = t && t!=='idle';
+  $('p-radio').className = 'pill ' + (busy?'busy':($('p-radio').classList.contains('on')?'on':''));
+  $('p-radio').lastChild.textContent = busy? t.replace('_',' ') : 'radio';
 }
-function renderNetworks(){
+function setPill(id,cls,label){ const e=$(id); e.className='pill '+cls; e.lastChild.textContent=label; }
+
+// ---------- networks ----------
+function bars(pwr){ // -30 strong .. -90 weak
+  const n = pwr>=-55?4 : pwr>=-67?3 : pwr>=-78?2 : 1;
+  const cls = pwr>=-67?'' : pwr>=-78?'w':'x';
+  let h=''; for(let i=1;i<=4;i++) h+=`<i class="${i<=n?'on':''}" style="height:${5+i*4}px"></i>`;
+  return `<div class="sig ${cls}">${h}</div>`;
+}
+function cryptoTag(c){
+  const k = (c||'').toUpperCase();
+  const cls = k.includes('WPA3')?'wpa3':k.includes('WPA2')?'wpa2':k.includes('WPA')?'wpa':k.includes('WEP')?'wep':'opn';
+  return `<span class="tag ${cls}">${esc(c||'OPN')}</span>`;
+}
+function addNet(n){ const fresh=!networks[n.bssid]; networks[n.bssid]=n; renderNets(fresh); }
+function renderNets(){
   const rows = Object.values(networks).sort((a,b)=>b.pwr-a.pwr);
   $('net-count').textContent = rows.length;
   $('net-empty').style.display = rows.length?'none':'block';
   $('networks').innerHTML = rows.map(n=>`
-    <tr onclick='selectNet(${JSON.stringify(n.bssid)})' class="${selNet&&selNet.bssid===n.bssid?'sel':''}">
-      <td>${esc(n.ssid)}</td><td>${n.channel}</td>
-      <td class="pwr">${n.pwr}</td><td>${esc(n.crypto)}</td>
-      <td style="color:var(--muted)">${n.bssid}</td>
-    </tr>`).join('');
+    <div class="net ${selNet&&selNet.bssid===n.bssid?'sel':''}" onclick='openTarget(${JSON.stringify(n.bssid)})'>
+      ${bars(n.pwr)}
+      <div class="net-main">
+        <div class="net-ssid ${n.ssid==='<Hidden>'?'hidden':''}">${esc(n.ssid)}</div>
+        <div class="net-sub">${cryptoTag(n.crypto)}<span>ch ${n.channel}</span><span class="bssid">${n.bssid.slice(0,8)}…</span></div>
+      </div>
+      <div class="dbm">${n.pwr}<span style="color:var(--dim)">dBm</span></div>
+    </div>`).join('');
 }
-function selectNet(bssid){
-  selNet = networks[bssid]; selClient=null;
-  $('clients').innerHTML=''; $('cli-count').textContent=0; $('cli-empty').style.display='block';
-  $('target').innerHTML = `<b>${esc(selNet.ssid)}</b> · ${selNet.bssid} · ch ${selNet.channel} · ${esc(selNet.crypto)}`;
-  renderNetworks(); refreshActions();
-}
+function rescan(){ networks={}; renderNets(); toast('cleared'); }
 
-// ---- clients ----
-function addClient(c){
-  $('cli-empty').style.display='none';
-  $('cli-count').textContent = c.idx;
-  const tr=document.createElement('tr');
-  tr.onclick=()=>selectClient(c.mac, tr);
-  tr.innerHTML=`<td>${c.mac}</td><td class="pwr">${c.pwr}</td>`;
-  $('clients').appendChild(tr);
-}
-function selectClient(mac, tr){
-  selClient = (selClient===mac)?null:mac;
-  [...$('clients').children].forEach(r=>r.classList.remove('sel'));
-  if(selClient) tr.classList.add('sel');
-  refreshActions();
-  $('target').innerHTML = selNet
-    ? `<b>${esc(selNet.ssid)}</b> · ${selNet.bssid} · ch ${selNet.channel}` +
-      (selClient?` → client <b>${selClient}</b>`:``)
-    : $('target').innerHTML;
-}
-
-function refreshActions(){
-  const idle = $('task').textContent==='idle';
-  const hasNet = !!selNet;
-  $('a-clients').disabled = !(idle&&hasNet);
-  $('a-hs').disabled      = !(idle&&hasNet);
-  $('a-pmkid').disabled   = !(idle&&hasNet);
-  $('a-deauth').disabled  = !(idle&&hasNet);
-  $('a-deauth').textContent = selClient?'Deauth Client':'Deauth All';
-  $('a-hs').textContent = selClient?'Handshake (client)':'Handshake';
-}
-
-// ---- actions ----
+// ---------- scan ----------
+async function toggleScan(){ scanning ? post('/stop') : post('/scan/networks/start'); }
 async function post(path, body){
   try{
-    const r = await fetch(api(path), {method:'POST',
-      headers:{'Content-Type':'application/json'}, body: body?JSON.stringify(body):null});
-    const d = await r.json();
-    if(!r.ok) logLine(`[error] ${d.detail||r.status}`,'l-error');
-  }catch(e){ logLine('[error] request failed','l-error'); }
+    const r = await fetch(api(path),{method:'POST',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):null});
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok){ log(`[error] ${d.detail||r.status}`,'l-err'); toast(d.detail||'error'); }
+    return r.ok;
+  }catch(e){ log('[error] request failed','l-err'); toast('request failed'); return false; }
 }
-const scanNetworks = ()=>post('/scan/networks/start');
-const stop = ()=>post('/stop');
-const scanClients = ()=> selNet && post('/scan/clients/start',{bssid:selNet.bssid,channel:selNet.channel});
-const deauth = ()=> selNet && post('/attack/deauth',{bssid:selNet.bssid,channel:selNet.channel,client:selClient});
-const handshake = ()=> selNet && post('/attack/handshake',
-  {bssid:selNet.bssid,channel:selNet.channel,client:selClient,ssid:selNet.ssid});
-const pmkid = ()=> selNet && post('/attack/pmkid',{bssid:selNet.bssid,ssid:selNet.ssid,channel:selNet.channel});
 
-// ---- captures ----
-async function loadCaptures(){
+// ---------- target sheet ----------
+function openTarget(bssid){
+  selNet = networks[bssid]; selClient=null; renderNets();
+  $('t-ssid').textContent = selNet.ssid;
+  $('t-meta').innerHTML = `${selNet.bssid} · ch ${selNet.channel} · ${esc(selNet.crypto)} · ${selNet.pwr}dBm`;
+  $('t-clients').innerHTML=''; $('hs-label').textContent='Handshake'; $('deauth-label').textContent='Deauth all';
+  $('target').classList.add('up');
+}
+function closeTarget(){ $('target').classList.remove('up'); selNet=null; selClient=null; renderNets(); }
+function addClient(c){
+  const box=$('t-clients'); const d=document.createElement('div');
+  d.className='cli'; d.onclick=()=>selClient2(c.mac,d);
+  d.innerHTML=`<span class="ic">📱</span><span class="mac">${c.mac}</span><span class="dbm">${c.pwr}dBm</span>`;
+  box.appendChild(d);
+}
+function selClient2(mac,el){
+  selClient = selClient===mac?null:mac;
+  [...$('t-clients').children].forEach(x=>x.classList.remove('sel'));
+  if(selClient){ el.classList.add('sel'); $('hs-label').textContent='Handshake'; $('deauth-label').textContent='Deauth client'; }
+  else { $('deauth-label').textContent='Deauth all'; }
+}
+const scanClients = ()=>{ if(!selNet)return; $('t-clients').innerHTML=''; post('/scan/clients/start',{bssid:selNet.bssid,channel:selNet.channel}); toast('scanning clients…'); };
+const deauth = ()=> selNet && confirmAuth('Deauth '+(selClient||'all clients')+' on '+selNet.ssid+'?',()=>post('/attack/deauth',{bssid:selNet.bssid,channel:selNet.channel,client:selClient}));
+const grabHandshake = ()=> selNet && post('/attack/handshake',{bssid:selNet.bssid,channel:selNet.channel,client:selClient,ssid:selNet.ssid}) && toast('capturing handshake…');
+const grabPmkid = ()=> selNet && post('/attack/pmkid',{bssid:selNet.bssid,ssid:selNet.ssid,channel:selNet.channel}) && toast('soliciting PMKID…');
+function confirmAuth(msg,fn){ if(confirm('⚠ Only against networks you own / are authorized to test.\n\n'+msg)) fn(); }
+
+// ---------- captures ----------
+async function loadCaps(){
   try{
-    const r = await fetch(api('/captures')); const d = await r.json();
-    const el = $('captures');
-    if(!d.captures.length){ el.innerHTML='<div class="empty">No captures yet.</div>'; return; }
-    el.innerHTML = d.captures.map(c=>
-      `<a class="dl" href="${api('/captures/'+encodeURIComponent(c.name))}" download>⬇ ${c.name} <span style="color:var(--muted)">(${(c.size/1024).toFixed(1)} KB)</span></a>`
-    ).join('');
+    const d = await (await fetch(api('/captures'))).json();
+    $('cap-empty').style.display = d.captures.length?'none':'block';
+    $('caps').innerHTML = d.captures.map(c=>`
+      <div class="cap"><span class="ci">${c.name.includes('pmkid')?'🔑':'🤝'}</span>
+        <div class="cm"><div class="cn">${c.name}</div><div class="cs">${(c.size/1024).toFixed(1)} KB</div></div>
+        <a href="${api('/captures/'+encodeURIComponent(c.name))}" download>↓</a></div>`).join('');
   }catch(e){}
 }
 
-// ---- log ----
-function logLine(text, cls){
-  const t=$('term'); const d=document.createElement('div');
-  d.className=cls; d.textContent=text; t.appendChild(d); t.scrollTop=t.scrollHeight;
-  while(t.children.length>500) t.removeChild(t.firstChild);
-}
-function clearLog(){ $('term').innerHTML=''; }
+// ---------- log / ui ----------
+function log(t,cls){ const l=$('log'); const d=document.createElement('div'); d.className=cls; d.textContent=t; l.appendChild(d); l.scrollTop=l.scrollHeight; while(l.children.length>400) l.removeChild(l.firstChild); }
+const sys = t=>log('• '+t,'l-sys'); function clearLog(){ $('log').innerHTML=''; }
+function tab(v){ document.querySelectorAll('.view').forEach(x=>x.classList.remove('active')); $('v-'+v).classList.add('active');
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b.dataset.v===v)); }
+let toastT; function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2200); }
 function esc(s){ return (s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 
-connect();
-loadCaptures();
+connect(); loadCaps();
 </script>
 </body>
 </html>
