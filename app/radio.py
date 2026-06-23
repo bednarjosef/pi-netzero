@@ -13,7 +13,7 @@ import sys
 from contextlib import contextmanager
 from threading import Event, Thread
 
-from app.config import IFACE, CHANNELS, RELEASE_RADIO
+from app.config import IFACE, CHANNELS, RELEASE_RADIO, MONITOR_UP_CMD
 
 
 def ensure_root():
@@ -67,10 +67,15 @@ def enable_monitor(iface=IFACE):
     laptop) a safe no-op instead of disturbing the host's Wi-Fi.
     """
     if iface not in list_interfaces():
-        raise RuntimeError(
-            f"Interface {iface!r} not found (have: {list_interfaces()}). "
-            "Refusing to touch the radio. Set PI_NETZERO_IFACE if it differs."
-        )
+        # On Pi-Tail the monitor vif (mon0) is created on demand by `mon0up`.
+        if MONITOR_UP_CMD:
+            _run(MONITOR_UP_CMD.split(), timeout=20)
+        if iface not in list_interfaces():
+            raise RuntimeError(
+                f"Interface {iface!r} not found (have: {list_interfaces()}). "
+                + (f"`{MONITOR_UP_CMD}` did not create it. " if MONITOR_UP_CMD else "")
+                + "Refusing to touch the radio. Check PI_NETZERO_IFACE / PI_NETZERO_MONITOR_UP_CMD."
+            )
 
     if is_monitor(iface):
         return

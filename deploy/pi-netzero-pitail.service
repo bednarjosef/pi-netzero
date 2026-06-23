@@ -1,0 +1,22 @@
+[Unit]
+Description=pi-netzero Wi-Fi recon server (Pi-Tail)
+After=network.target
+# No USB-gadget dependency: on Pi-Tail the phone link + DHCP are already
+# provided by the image. We only run the app.
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/pi-netzero
+# Use Pi-Tail's mon0 monitor vif, don't touch the radio's network manager, and
+# stay off port 80 so we don't collide with any Pi-Tail web service.
+Environment=PI_NETZERO_IFACE=mon0
+Environment=PI_NETZERO_RELEASE_RADIO=0
+Environment=PI_NETZERO_PORT=8080
+Environment=PI_NETZERO_MONITOR_UP_CMD=mon0up
+ExecStart=/opt/pi-netzero/.venv/bin/python /opt/pi-netzero/main.py
+Restart=on-failure
+RestartSec=3
+# Runs as root: needs raw sockets for scapy and to run mon0up.
+
+[Install]
+WantedBy=multi-user.target

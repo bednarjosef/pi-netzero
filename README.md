@@ -29,18 +29,49 @@ Pi never steals the phone's cellular internet.
 ## Requirements
 
 - Raspberry Pi Zero 2 W
-- **Kali Linux** for the Pi Zero 2 W — it ships the Nexmon packages that give the
-  onboard Broadcom chip monitor mode + injection. (Plain Raspberry Pi OS will not
-  do monitor mode on the onboard chip without building Nexmon yourself.)
+- One of two Kali images (both ship **Nexmon** for onboard monitor mode +
+  injection; plain Raspberry Pi OS will not do monitor mode on the onboard chip):
+  - **Pi-Tail (recommended)** — Kali's image purpose-built to drive a Pi Zero 2 W
+    from a phone. It already provides USB-gadget phone control, SSH/VNC, and a
+    `mon0up` helper for monitor mode. You run *only* the app on top.
+  - **Plain Kali ARM image** — `pi-netzero` then sets up its own USB gadget and
+    becomes a self-contained appliance.
 - An Android phone (USB host capable — most are)
 - A small power bank (recommended — see Power below)
 
 ## Install
 
-On the Pi:
+### A. Pi-Tail (recommended)
+
+Pi-Tail owns the USB-gadget link and monitor mode, so install only the app:
 
 ```bash
-git clone <this repo> ~/pi-netzero      # or copy it across
+git clone https://github.com/bednarjosef/pi-netzero ~/pi-netzero
+cd ~/pi-netzero
+sudo deploy/install-pitail.sh
+sudo systemctl start pi-netzero      # or reboot — it auto-starts
+```
+
+This installs a service preconfigured with `PI_NETZERO_IFACE=mon0`,
+`PI_NETZERO_RELEASE_RADIO=0`, `PI_NETZERO_PORT=8080`, and
+`PI_NETZERO_MONITOR_UP_CMD=mon0up` — so the app brings up Pi-Tail's `mon0`
+monitor interface itself. It does **not** touch USB gadget / dwc2 / dnsmasq.
+
+Then from your phone (already connected to Pi-Tail over USB) open
+**`http://<pi-tail-ip>:8080`** — the same IP you SSH to Pi-Tail on
+(`ip a show usb0`).
+
+To try it without installing a service:
+
+```bash
+sudo PI_NETZERO_IFACE=mon0 PI_NETZERO_RELEASE_RADIO=0 PI_NETZERO_PORT=8080 \
+     PI_NETZERO_MONITOR_UP_CMD=mon0up .venv/bin/python main.py
+```
+
+### B. Plain Kali ARM image (self-contained appliance)
+
+```bash
+git clone https://github.com/bednarjosef/pi-netzero ~/pi-netzero
 cd ~/pi-netzero
 sudo deploy/install.sh
 sudo reboot
@@ -48,14 +79,15 @@ sudo reboot
 
 `install.sh` sets up the venv, enables the `dwc2` USB gadget, installs the
 systemd services (auto-start on boot), and runs a private dnsmasq on the cable.
+The phone then reaches the UI at **http://10.55.0.1**.
 
 ## Use
 
 1. Power the Pi from a power bank via the **PWR** port.
 2. Run a data cable from the Pi's **USB** port (the inner one, labelled `USB`,
    not `PWR`) to your phone.
-3. The phone auto-detects a wired/RNDIS connection. Open a browser to
-   **http://10.55.0.1**.
+3. Open the UI: **`http://<pi-tail-ip>:8080`** (Pi-Tail) or **http://10.55.0.1**
+   (plain image).
 4. **Scan Networks** → tap a network to target it → **Scan Clients**,
    **Handshake**, **PMKID**, or **Deauth**. Captures appear in the Captures
    panel as downloadable `.pcap` files.
@@ -84,9 +116,11 @@ app/
 deploy/
   usb_gadget.sh           RNDIS USB-Ethernet gadget up/down (+ dnsmasq)
   dnsmasq-usb0.conf        DHCP for the cable, no default route
-  pi-netzero-usb.service   systemd: bring the gadget up at boot
-  pi-netzero.service       systemd: run the server
-  install.sh               installer
+  pi-netzero-usb.service   systemd: bring the gadget up at boot (plain image)
+  pi-netzero.service       systemd: run the server (plain image)
+  install.sh               installer (plain Kali image, self-contained)
+  pi-netzero-pitail.service systemd: run the server on Pi-Tail (app only)
+  install-pitail.sh        installer for Pi-Tail (app only, no USB gadget)
 main.py           entrypoint (sudo .venv/bin/python main.py)
 ```
 
@@ -112,7 +146,8 @@ WS   /ws/v1/stream                        live status/log/network/client/capture
 | `PI_NETZERO_PORT` | `80` | HTTP port |
 | `PI_NETZERO_CAPTURES` | `<repo>/captures` | where `.pcap` files are written |
 | `PI_NETZERO_CHANNELS` | `1..11` | channels to hop while scanning |
-| `PI_NETZERO_RELEASE_RADIO` | `1` | free the radio from NetworkManager/wpa_supplicant first |
+| `PI_NETZERO_RELEASE_RADIO` | `1` | free the radio from NetworkManager/wpa_supplicant first (set `0` on Pi-Tail) |
+| `PI_NETZERO_MONITOR_UP_CMD` | _(empty)_ | command to create the monitor vif if missing (Pi-Tail: `mon0up`) |
 
 ## ⚠️ Authorization
 

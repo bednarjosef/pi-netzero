@@ -23,7 +23,13 @@ CHANNEL_HOP_DELAY = float(_env("PI_NETZERO_HOP_DELAY", "0.5"))
 
 # Best-effort: free the radio from NetworkManager / wpa_supplicant before
 # entering monitor mode. Safe because the phone link is USB, not Wi-Fi.
+# On Pi-Tail set this to 0 — Pi-Tail owns the radio.
 RELEASE_RADIO = _env("PI_NETZERO_RELEASE_RADIO", "1") == "1"
+
+# Optional command that creates the monitor interface if it's missing. On
+# Pi-Tail this is `mon0up`, which brings up the `mon0` monitor vif. Empty (the
+# default) means pi-netzero flips the interface into monitor mode itself.
+MONITOR_UP_CMD = _env("PI_NETZERO_MONITOR_UP_CMD", "")
 
 # --- Server -------------------------------------------------------------------
 HOST = _env("PI_NETZERO_HOST", "0.0.0.0")
