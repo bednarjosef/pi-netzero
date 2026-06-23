@@ -68,8 +68,10 @@ def enable_monitor(iface=IFACE):
     """
     if iface not in list_interfaces():
         # On Pi-Tail the monitor vif (mon0) is created on demand by `mon0up`.
+        # Run it via a shell: mon0up is a shebang-less script, so a bare execve
+        # raises ENOEXEC ("Exec format error"). The shell handles that + PATH.
         if MONITOR_UP_CMD:
-            _run(MONITOR_UP_CMD.split(), timeout=20)
+            _run(["/bin/sh", "-c", MONITOR_UP_CMD], timeout=20)
         if iface not in list_interfaces():
             raise RuntimeError(
                 f"Interface {iface!r} not found (have: {list_interfaces()}). "
