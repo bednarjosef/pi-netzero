@@ -109,22 +109,27 @@ class NetZero:
         self.status(f"Scan finished — {len(self.networks)} networks.")
 
     def _on_beacon(self, packet: Packet):
-        if not dot11.is_beacon(packet):
+        # A malformed frame must never raise out of the sniff prn — scapy stops
+        # the whole capture if the callback throws.
+        try:
+            if not dot11.is_beacon(packet):
+                return
+            bssid = dot11.get_bssid(packet)
+            if bssid in self.networks:
+                return
+            stats = packet[Dot11Beacon].network_stats()
+            info = {
+                "idx": len(self.networks) + 1,
+                "bssid": bssid,
+                "ssid": dot11.parse_ssid(stats["ssid"]),
+                "pwr": dot11.get_rssi(packet),
+                "channel": stats["channel"],
+                "crypto": dot11.parse_crypto(stats["crypto"]),
+            }
+            self.networks[bssid] = info
+            self._emit({"type": "network", "network": info})
+        except Exception:
             return
-        bssid = dot11.get_bssid(packet)
-        if bssid in self.networks:
-            return
-        stats = packet[Dot11Beacon].network_stats()
-        info = {
-            "idx": len(self.networks) + 1,
-            "bssid": bssid,
-            "ssid": dot11.parse_ssid(stats["ssid"]),
-            "pwr": dot11.get_rssi(packet),
-            "channel": stats["channel"],
-            "crypto": dot11.parse_crypto(stats["crypto"]),
-        }
-        self.networks[bssid] = info
-        self._emit({"type": "network", "network": info})
 
     # --- client scan ----------------------------------------------------------
     def start_client_scan(self, bssid, channel):
@@ -143,22 +148,25 @@ class NetZero:
         self.status(f"Client scan finished — {len(self.clients)} clients.")
 
     def _on_data_frame(self, packet: Packet, target_bssid, channel):
-        if getattr(packet, "type", None) != 2:
+        try:
+            if getattr(packet, "type", None) != 2:
+                return
+            bssid, client = dot11.data_frame_endpoints(packet)
+            if bssid != target_bssid or not dot11.is_unicast_client(client):
+                return
+            if client in self.clients:
+                return
+            info = {
+                "idx": len(self.clients) + 1,
+                "mac": client,
+                "pwr": dot11.get_rssi(packet),
+                "bssid": target_bssid,
+                "channel": channel,
+            }
+            self.clients[client] = info
+            self._emit({"type": "client", "client": info})
+        except Exception:
             return
-        bssid, client = dot11.data_frame_endpoints(packet)
-        if bssid != target_bssid or not dot11.is_unicast_client(client):
-            return
-        if client in self.clients:
-            return
-        info = {
-            "idx": len(self.clients) + 1,
-            "mac": client,
-            "pwr": dot11.get_rssi(packet),
-            "bssid": target_bssid,
-            "channel": channel,
-        }
-        self.clients[client] = info
-        self._emit({"type": "client", "client": info})
 
     # --- deauth ---------------------------------------------------------------
     def start_deauth(self, bssid, client, channel, bursts=3):
