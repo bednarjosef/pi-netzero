@@ -223,7 +223,7 @@ def crack(name: str):
         raise HTTPException(400, detail="Hash file empty or missing")
     label = "pinetzero-" + re.sub(r"[^A-Za-z0-9]", "-", name.rsplit(".", 1)[0])[:40] + "-" + str(int(time.time()))
     try:
-        res = vast.launch(label, content)
+        res = vast.launch(label, content, e.get("ssid", "network"))
     except vast.VastError as ex:
         raise HTTPException(502, detail=str(ex))
     netzero.store.update(name, status="cracking", instance_id=res["instance_id"], label=label)

