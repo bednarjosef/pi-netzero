@@ -251,7 +251,13 @@ def crack_instances():
     live = {i["id"] for i in ours}
     for h in netzero.store.list():
         if h.get("status") == "cracking" and h.get("instance_id") not in live:
-            netzero.store.update(h["name"], status="finished")
+            # The job self-destructed. Its last status line tells us the outcome:
+            # "cracked: <pw>" -> record the password; otherwise it's finished.
+            last = (prog.get(h.get("label", "")) or "")
+            if last.lower().startswith("cracked:"):
+                netzero.store.update(h["name"], status="cracked", password=last.split(":", 1)[1].strip())
+            else:
+                netzero.store.update(h["name"], status="finished")
     return {"instances": ours, "vast": True}
 
 

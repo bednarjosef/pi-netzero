@@ -147,7 +147,7 @@ __HASH__
 HCEOF
 POT=/workspace/cracked.pot
 check(){ hashcat -m 22000 target.hc22000 --show --potfile-path "$POT" 2>/dev/null > RESULT.txt; [ -s RESULT.txt ]; }
-finish(){ PW=$(awk -F: '{print $NF}' RESULT.txt | paste -sd" "); notify "CRACKED $LABEL : $PW"; setstage "cracked: $PW" ""; sleep 20; selfdestruct; exit 0; }
+finish(){ PW=$(awk -F: '{print $NF}' RESULT.txt | sort -u | paste -sd" "); notify "CRACKED $LABEL : $PW"; setstage "cracked: $PW" ""; sleep 20; selfdestruct; exit 0; }
 
 setstage "downloading rockyou" ""
 curl -sL -o rockyou.txt "__ROCKYOU__"
