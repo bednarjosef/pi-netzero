@@ -35,6 +35,18 @@ else
   echo "    Pi-Tail image. On a plain Kali image use deploy/install.sh instead."
 fi
 
+# CRITICAL: Pi-Tail associates wlan0 with the 'sepultura' hotspot at boot. On
+# the Zero 2 W's Broadcom chip that station-mode association crashes the Wi-Fi
+# firmware (the SDIO card drops off until reboot) and monitor mode never works.
+# Disable the wlan0 station stanza so the chip stays alive for monitor mode.
+IFACES=/boot/firmware/interfaces
+if [ -f "$IFACES" ] && grep -q '^allow-hotplug wlan0' "$IFACES"; then
+  echo "[*] Disabling wlan0 station mode (it crashes the Zero 2 W Wi-Fi firmware)"
+  cp "$IFACES" "$IFACES.pre-pinetzero"
+  sed -i '/^allow-hotplug wlan0/,+3 s/^/#/' "$IFACES"
+fi
+systemctl mask wpa_supplicant >/dev/null 2>&1 || true
+
 echo "[*] Installing + enabling the app service"
 install -m 644 "$APP/deploy/pi-netzero-pitail.service" /etc/systemd/system/pi-netzero.service
 systemctl daemon-reload

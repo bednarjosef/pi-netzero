@@ -49,24 +49,41 @@ Pi-Tail owns the USB-gadget link and monitor mode, so install only the app:
 git clone https://github.com/bednarjosef/pi-netzero ~/pi-netzero
 cd ~/pi-netzero
 sudo deploy/install-pitail.sh
-sudo systemctl start pi-netzero      # or reboot — it auto-starts
+sudo reboot
 ```
 
-This installs a service preconfigured with `PI_NETZERO_IFACE=mon0`,
-`PI_NETZERO_RELEASE_RADIO=0`, `PI_NETZERO_PORT=8080`, and
-`PI_NETZERO_MONITOR_UP_CMD=mon0up` — so the app brings up Pi-Tail's `mon0`
-monitor interface itself. It does **not** touch USB gadget / dwc2 / dnsmasq.
+> **⚠️ Critical Pi-Tail step (Zero 2 W onboard Wi-Fi).** Out of the box Pi-Tail
+> tries to associate `wlan0` with the `sepultura` hotspot. On the Zero 2 W's
+> Broadcom chip that **station-mode association crashes the Wi-Fi firmware**
+> (`brcmf_fw_crashed`, the SDIO card drops off and never comes back until
+> reboot) — so monitor mode never works. **Disable the `wlan0` station stanza**
+> in `/boot/firmware/interfaces` (comment out `allow-hotplug wlan0` and its
+> `iface wlan0 … wpa-roam …` block) and mask wpa_supplicant:
+> ```bash
+> sudo sed -i '/allow-hotplug wlan0/,+3 s/^/#/' /boot/firmware/interfaces
+> sudo systemctl mask wpa_supplicant
+> ```
+> The chip then stays alive and monitor mode works. `install-pitail.sh` does
+> this for you; the snippet above is what it runs.
 
-Then from your phone (already connected to Pi-Tail over USB) open
+The service is preconfigured (`PI_NETZERO_IFACE=mon0`, `RELEASE_RADIO=0`,
+`PORT=8080`, `MONITOR_UP_CMD=mon0up`, `DOWN_IFACE=wlan0`) and an `ExecStartPre`
+waits for the radio, runs `mon0up`, and downs `wlan0` so the `mon0` monitor vif
+owns the channel. Notes on why each is needed:
+
+- **`mon0up` (not flipping wlan0)** — nexmon only delivers frames through a
+  dedicated `mon0` vif; setting `wlan0` itself to `type monitor` reports success
+  but captures nothing.
+- **`DOWN_IFACE=wlan0`** — leaving `wlan0` up pins the radio's channel and
+  starves the hopping monitor vif (scans come back empty).
+
+Then from your phone (connected to Pi-Tail over USB) open
 **`http://<pi-tail-ip>:8080`** — the same IP you SSH to Pi-Tail on
-(`ip a show usb0`).
+(`ip a show usb0`; for a PC over USB it's `192.168.42.254`).
 
-To try it without installing a service:
-
-```bash
-sudo PI_NETZERO_IFACE=mon0 PI_NETZERO_RELEASE_RADIO=0 PI_NETZERO_PORT=8080 \
-     PI_NETZERO_MONITOR_UP_CMD=mon0up .venv/bin/python main.py
-```
+> Onboard Nexmon monitor on the Zero 2 W is real but **marginal** — capture
+> counts vary run to run and injection is less reliable than a dedicated
+> adapter. For heavy use, an external Atheros/Realtek adapter is steadier.
 
 ### B. Plain Kali ARM image (self-contained appliance)
 
