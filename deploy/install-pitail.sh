@@ -47,10 +47,16 @@ if [ -f "$IFACES" ] && grep -q '^allow-hotplug wlan0' "$IFACES"; then
 fi
 systemctl mask wpa_supplicant >/dev/null 2>&1 || true
 
+echo "[*] Installing usb0 DHCP server (so a plugged-in phone/PC auto-gets an IP)"
+# Pi-Tail runs no DHCP on usb0, so connected devices never get an address and
+# can't reach the UI. This serves one, bound to usb0 only.
+install -m 644 "$APP/deploy/dnsmasq-usb0-pitail.conf" /etc/dnsmasq-usb0.conf
+install -m 644 "$APP/deploy/pi-netzero-usb-dhcp.service" /etc/systemd/system/
+
 echo "[*] Installing + enabling the app service"
 install -m 644 "$APP/deploy/pi-netzero-pitail.service" /etc/systemd/system/pi-netzero.service
 systemctl daemon-reload
-systemctl enable pi-netzero.service
+systemctl enable pi-netzero.service pi-netzero-usb-dhcp.service
 
 cat <<'EOF'
 

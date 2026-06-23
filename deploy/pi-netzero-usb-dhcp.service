@@ -1,0 +1,12 @@
+[Unit]
+Description=pi-netzero DHCP for the USB link (usb0)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/dnsmasq -k --conf-file=/etc/dnsmasq-usb0.conf
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
