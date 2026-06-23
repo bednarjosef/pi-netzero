@@ -341,12 +341,12 @@ function addClient(c){
 function selClient2(mac,el){
   selClient = selClient===mac?null:mac;
   [...$('t-clients').children].forEach(x=>x.classList.remove('sel'));
-  if(selClient){ el.classList.add('sel'); $('hs-label').textContent='Handshake'; $('deauth-label').textContent='Deauth client'; }
-  else { $('deauth-label').textContent='Deauth all'; }
+  if(selClient){ el.classList.add('sel'); $('hs-label').textContent='Handshake ◂ '+mac.slice(-8); $('deauth-label').textContent='Deauth client'; }
+  else { $('hs-label').textContent='Handshake'; $('deauth-label').textContent='Deauth all'; }
 }
 const scanClients = ()=>{ if(!selNet)return; $('t-clients').innerHTML=''; post('/scan/clients/start',{bssid:selNet.bssid,channel:selNet.channel}); toast('scanning clients…'); };
 const deauth = ()=> selNet && confirmAuth('Deauth '+(selClient||'all clients')+' on '+selNet.ssid+'?',()=>post('/attack/deauth',{bssid:selNet.bssid,channel:selNet.channel,client:selClient}));
-const grabHandshake = ()=> selNet && post('/attack/handshake',{bssid:selNet.bssid,channel:selNet.channel,client:selClient,ssid:selNet.ssid}) && toast('capturing handshake…');
+const grabHandshake = ()=>{ if(!selNet)return; post('/attack/handshake',{bssid:selNet.bssid,channel:selNet.channel,client:selClient,ssid:selNet.ssid}); toast(selClient?('deauthing '+selClient.slice(-8)+' + capturing…'):'capturing handshake (any client)…'); };
 const grabPmkid = ()=> selNet && post('/attack/pmkid',{bssid:selNet.bssid,ssid:selNet.ssid,channel:selNet.channel}) && toast('soliciting PMKID…');
 function confirmAuth(msg,fn){ if(confirm('⚠ Only against networks you own / are authorized to test.\n\n'+msg)) fn(); }
 

