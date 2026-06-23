@@ -31,6 +31,12 @@ RELEASE_RADIO = _env("PI_NETZERO_RELEASE_RADIO", "1") == "1"
 # default) means pi-netzero flips the interface into monitor mode itself.
 MONITOR_UP_CMD = _env("PI_NETZERO_MONITOR_UP_CMD", "")
 
+# Interface to bring DOWN before capturing. On Pi-Tail `mon0up` adds a monitor
+# vif but leaves wlan0 up in managed mode on the same radio — it pins the
+# channel and starves the monitor interface (captures nothing). Downing it lets
+# the monitor vif own the radio. Empty = leave other interfaces alone.
+DOWN_IFACE = _env("PI_NETZERO_DOWN_IFACE", "")
+
 # --- Server -------------------------------------------------------------------
 HOST = _env("PI_NETZERO_HOST", "0.0.0.0")
 PORT = int(_env("PI_NETZERO_PORT", "80"))

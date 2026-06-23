@@ -13,7 +13,7 @@ import sys
 from contextlib import contextmanager
 from threading import Event, Thread
 
-from app.config import IFACE, CHANNELS, RELEASE_RADIO, MONITOR_UP_CMD
+from app.config import IFACE, CHANNELS, RELEASE_RADIO, MONITOR_UP_CMD, DOWN_IFACE
 
 
 def ensure_root():
@@ -78,6 +78,11 @@ def enable_monitor(iface=IFACE):
                 + (f"`{MONITOR_UP_CMD}` did not create it. " if MONITOR_UP_CMD else "")
                 + "Refusing to touch the radio. Check PI_NETZERO_IFACE / PI_NETZERO_MONITOR_UP_CMD."
             )
+
+    # Free the radio from a managed interface sharing the same phy (e.g. Pi-Tail
+    # leaves wlan0 up alongside mon0, which pins the channel and starves capture).
+    if DOWN_IFACE and DOWN_IFACE in list_interfaces():
+        _run(["ip", "link", "set", DOWN_IFACE, "down"])
 
     if is_monitor(iface):
         return
