@@ -2,6 +2,10 @@
 __pycache__/
 *.pyc
 captures/
+hashes/
 *.pcap
 *.pcapng
+*.hc22000
 .env
+vast.key
+ntfy.topic

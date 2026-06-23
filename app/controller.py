@@ -22,6 +22,7 @@ from scapy.packet import Packet
 
 from app import attacks, dot11
 from app.config import CAPTURE_DIR, CHANNEL_HOP_DELAY, IFACE
+from app.hashes import HashStore
 from app.radio import channel_hopper, enable_monitor, is_monitor, set_channel
 
 
@@ -38,7 +39,17 @@ class NetZero:
         self.clients = {}         # mac -> info
         self._stop = Event()
         self._worker = None
+        self.store = HashStore()
         CAPTURE_DIR.mkdir(parents=True, exist_ok=True)
+
+    def _register_hash(self, pcap, bssid, ssid, kind):
+        """Convert a successful capture to hc22000 and announce it."""
+        entry = self.store.register(pcap, bssid, ssid, kind)
+        if entry:
+            self._emit({"type": "hash", "hash": entry})
+            self.log(f"Hash extracted → {entry['name']}")
+        else:
+            self.log(f"{kind} captured but no crackable hash could be extracted.", level="error")
 
     # --- event helpers --------------------------------------------------------
     def status(self, msg):
@@ -190,6 +201,8 @@ class NetZero:
         ok = any((m["M1"] and m["M2"]) or (m["M2"] and m["M3"]) for m in hs.values())
         self._emit({"type": "capture", "kind": "handshake", "ok": ok,
                     "file": outfile.split("/")[-1] if ok else None})
+        if ok:
+            self._register_hash(outfile, bssid, ssid, "handshake")
 
     # --- PMKID ----------------------------------------------------------------
     def start_pmkid(self, bssid, ssid, channel):
@@ -205,3 +218,5 @@ class NetZero:
             wait()
         self._emit({"type": "capture", "kind": "pmkid", "ok": st["pmkid"],
                     "file": outfile.split("/")[-1] if st["pmkid"] else None})
+        if st["pmkid"]:
+            self._register_hash(outfile, bssid, ssid, "pmkid")

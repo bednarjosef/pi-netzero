@@ -7,6 +7,8 @@ connected WebSocket.
 
 import asyncio
 import json
+import re
+import time
 from asyncio import Queue
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -16,7 +18,8 @@ from fastapi import Body, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
-from app.config import CAPTURE_DIR, HOST, PORT
+from app import vast
+from app.config import CAPTURE_DIR, HOST, PORT, NTFY_TOPIC
 from app.controller import NetZero
 from app.radio import enable_monitor, ensure_root, list_interfaces
 
@@ -190,6 +193,64 @@ def download_capture(name: str):
     if target.parent != CAPTURE_DIR.resolve() or not target.is_file():
         raise HTTPException(404, detail="Not found")
     return FileResponse(target, filename=name, media_type="application/vnd.tcpdump.pcap")
+
+
+# --- hashes + cracking --------------------------------------------------------
+@app.get("/api/v1/hashes")
+def hashes():
+    return {"hashes": netzero.store.list(), "ntfy": NTFY_TOPIC, "vast": vast.configured()}
+
+
+@app.get("/api/v1/hashes/{name}")
+def download_hash(name: str):
+    e = netzero.store.get(name)
+    if not e or not Path(e["file"]).is_file():
+        raise HTTPException(404, detail="Not found")
+    return FileResponse(e["file"], filename=name, media_type="text/plain")
+
+
+@app.post("/api/v1/crack/{name}")
+def crack(name: str):
+    e = netzero.store.get(name)
+    if not e:
+        raise HTTPException(404, detail="Hash not found")
+    if not vast.configured():
+        raise HTTPException(400, detail="No Vast API key on the Pi (put it in vast.key).")
+    content = netzero.store.content(name)
+    if not content:
+        raise HTTPException(400, detail="Hash file empty or missing")
+    label = "pinetzero-" + re.sub(r"[^A-Za-z0-9]", "-", name.rsplit(".", 1)[0])[:40] + "-" + str(int(time.time()))
+    try:
+        res = vast.launch(label, content)
+    except vast.VastError as ex:
+        raise HTTPException(502, detail=str(ex))
+    netzero.store.update(name, status="cracking", instance_id=res["instance_id"], label=label)
+    return {"message": f"Launched on {res['gpu']} (${res['dph']}/hr) — watch ntfy '{NTFY_TOPIC}'.", **res}
+
+
+@app.get("/api/v1/crack/instances")
+def crack_instances():
+    if not vast.configured():
+        return {"instances": [], "vast": False}
+    try:
+        ins = vast.instances()
+    except vast.VastError as ex:
+        raise HTTPException(502, detail=str(ex))
+    ours = [{
+        "id": i.get("id"), "label": i.get("label"),
+        "status": i.get("actual_status") or i.get("cur_state"),
+        "dph": round(i.get("dph_total", 0) or 0, 3), "gpu": i.get("gpu_name"),
+    } for i in ins if str(i.get("label", "")).startswith("pinetzero-")]
+    return {"instances": ours, "vast": True}
+
+
+@app.delete("/api/v1/crack/instances/{iid}")
+def destroy_instance(iid: int):
+    try:
+        vast.destroy(iid)
+    except vast.VastError as ex:
+        raise HTTPException(502, detail=str(ex))
+    return {"message": "Instance destroyed."}
 
 
 if __name__ == "__main__":

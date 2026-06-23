@@ -175,6 +175,26 @@
       <div class="empty" id="cap-empty">No captures yet. Grab a handshake or PMKID.</div>
     </div>
   </section>
+
+  <!-- HASHES / CRACK -->
+  <section id="v-hash" class="view">
+    <div class="card">
+      <div class="card-b" style="font-size:12.5px;color:var(--muted)">
+        🔔 Subscribe to ntfy topic <b id="ntfy-topic" class="mono" style="color:var(--cyan)">—</b> in the <b>ntfy</b> app
+        to get cracked passwords pushed to your phone.
+        <div id="vast-warn" style="display:none;color:var(--amber);margin-top:6px">⚠ No Vast API key on the Pi — add <b class="mono">vast.key</b> to enable the Crack button.</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Captured hashes</h2><span class="count" id="hash-count">0</span></div>
+      <div id="hashes"></div>
+      <div class="empty" id="hash-empty">No hashes yet. Capture a handshake or PMKID.</div>
+    </div>
+    <div class="card" id="inst-card" style="display:none">
+      <div class="card-h"><h2>GPU crack jobs</h2><button class="ghost sm" style="padding:5px 10px" onclick="loadInstances()">Refresh</button></div>
+      <div id="instances"></div>
+    </div>
+  </section>
 </main>
 
 <!-- target action sheet -->
@@ -195,8 +215,9 @@
 
 <nav>
   <button class="active" data-v="scan" onclick="tab('scan')"><span class="ic">📶</span>Scan</button>
-  <button data-v="log" onclick="tab('log')"><span class="ic">📜</span>Log</button>
+  <button data-v="hash" onclick="tab('hash')"><span class="ic">🔓</span>Hashes</button>
   <button data-v="caps" onclick="tab('caps')"><span class="ic">💾</span>Captures</button>
+  <button data-v="log" onclick="tab('log')"><span class="ic">📜</span>Log</button>
 </nav>
 
 <div class="toast" id="toast"></div>
@@ -224,6 +245,8 @@ function handle(m){
     case 'capture':
       log(m.ok?`✓ ${m.kind} saved: ${m.file}`:`✗ ${m.kind} failed`, m.ok?'l-info':'l-err');
       toast(m.ok?`${m.kind} captured ✓`:`${m.kind} failed`); loadCaps(); break;
+    case 'hash':
+      upsertHash(m.hash); toast('🔓 hash extracted: '+m.hash.ssid); break;
   }
 }
 function applyState(s){ setTask(s.task); setPill('p-radio', s.monitor?'on':'', 'radio'); }
@@ -316,15 +339,78 @@ async function loadCaps(){
   }catch(e){}
 }
 
+// ---------- hashes / cracking ----------
+let hashes = {}, vastOn = false;
+async function loadHashes(){
+  try{
+    const d = await (await fetch(api('/hashes'))).json();
+    vastOn = d.vast; hashes = {}; d.hashes.forEach(h=>hashes[h.name]=h);
+    $('ntfy-topic').textContent = d.ntfy;
+    $('vast-warn').style.display = d.vast?'none':'block';
+    renderHashes(); loadInstances();
+  }catch(e){}
+}
+function upsertHash(h){ hashes[h.name]=h; renderHashes(); }
+function statusTag(h){
+  if(h.status==='cracked') return `<span class="tag wpa2">CRACKED</span>`;
+  if(h.status==='cracking') return `<span class="tag wpa">cracking…</span>`;
+  if(h.status==='exhausted') return `<span class="tag opn">not found</span>`;
+  return `<span class="tag wpa3">ready</span>`;
+}
+function renderHashes(){
+  const rows = Object.values(hashes).sort((a,b)=>b.captured_at-a.captured_at);
+  $('hash-count').textContent = rows.length;
+  $('hash-empty').style.display = rows.length?'none':'block';
+  $('hashes').innerHTML = rows.map(h=>`
+    <div class="cap">
+      <span class="ci">${h.kind==='pmkid'?'🔑':'🤝'}</span>
+      <div class="cm">
+        <div class="cn" style="font-family:inherit;font-weight:650">${esc(h.ssid)}</div>
+        <div class="cs">${h.kind} · ${statusTag(h)} ${h.password?`<b class="mono" style="color:var(--green)">${esc(h.password)}</b>`:''}</div>
+      </div>
+      ${h.status==='captured'
+        ? `<button class="violet sm" ${vastOn?'':'disabled'} onclick="crack('${h.name}')">⚡ Crack</button>`
+        : `<a href="${api('/hashes/'+encodeURIComponent(h.name))}" download>↓</a>`}
+    </div>`).join('');
+}
+function crack(name){
+  const h = hashes[name];
+  if(!confirm('⚠ Only crack networks you OWN or are authorized to test.\n\nSpin up a GPU on Vast.ai to crack "'+h.ssid+'"?\nrockyou → 8-digit numbers → all-h.txt (auto-kills after ~3h).')) return;
+  toast('launching GPU…');
+  fetch(api('/crack/'+encodeURIComponent(name)),{method:'POST'})
+    .then(r=>r.json().then(d=>({ok:r.ok,d})))
+    .then(({ok,d})=>{ toast(ok?(d.message||'launched'):(d.detail||'failed'),ok?0:1); if(ok){hashes[name].status='cracking';renderHashes();loadInstances();} })
+    .catch(()=>toast('launch failed',1));
+}
+async function loadInstances(){
+  if(!vastOn) return;
+  try{
+    const d = await (await fetch(api('/crack/instances'))).json();
+    const box=$('inst-card');
+    if(!d.instances.length){ box.style.display='none'; return; }
+    box.style.display='block';
+    $('instances').innerHTML = d.instances.map(i=>`
+      <div class="cap"><span class="ci">🖥️</span>
+        <div class="cm"><div class="cn" style="font-family:inherit">${esc(i.gpu||'GPU')} · $${i.dph}/hr</div>
+          <div class="cs">${esc(i.status||'…')} · ${esc(i.label||'')}</div></div>
+        <button class="red sm" onclick="destroyInst(${i.id})">Kill</button></div>`).join('');
+  }catch(e){}
+}
+function destroyInst(id){
+  if(!confirm('Destroy GPU instance '+id+'? (stops billing)')) return;
+  fetch(api('/crack/instances/'+id),{method:'DELETE'}).then(()=>{ toast('destroyed'); loadInstances(); });
+}
+
 // ---------- log / ui ----------
 function log(t,cls){ const l=$('log'); const d=document.createElement('div'); d.className=cls; d.textContent=t; l.appendChild(d); l.scrollTop=l.scrollHeight; while(l.children.length>400) l.removeChild(l.firstChild); }
 const sys = t=>log('• '+t,'l-sys'); function clearLog(){ $('log').innerHTML=''; }
 function tab(v){ document.querySelectorAll('.view').forEach(x=>x.classList.remove('active')); $('v-'+v).classList.add('active');
-  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b.dataset.v===v)); }
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b.dataset.v===v));
+  if(v==='hash') loadHashes(); if(v==='caps') loadCaps(); }
 let toastT; function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2200); }
 function esc(s){ return (s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 
-connect(); loadCaps();
+connect(); loadCaps(); loadHashes();
 </script>
 </body>
 </html>

@@ -18,9 +18,9 @@ echo "[*] Installing pi-netzero (app only) -> $APP"
 mkdir -p "$APP"
 rsync -a --delete --exclude '.git' --exclude '.venv' --exclude 'captures' "$SRC"/ "$APP"/
 
-echo "[*] System packages (python venv, iw)"
+echo "[*] System packages (python venv, iw, hcxtools for hash extraction)"
 apt-get update -qq
-apt-get install -y python3-venv python3-pip iw rsync >/dev/null
+apt-get install -y python3-venv python3-pip iw rsync hcxtools >/dev/null
 
 echo "[*] Python virtualenv + deps"
 python3 -m venv "$APP/.venv"
