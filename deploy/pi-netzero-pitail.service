@@ -7,13 +7,19 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/pi-netzero
-# Flip wlan0 itself into monitor mode (single interface owns the radio — Pi-Tail's
-# mon0-alongside-wlan0 makes the two fight over the channel and capture nothing).
+# nexmon's monitor mode only delivers frames through a dedicated mon0 vif (a
+# flipped wlan0 reports type monitor but captures nothing), so use mon0up. Then
+# down wlan0 so mon0 owns the radio's channel for hopping.
 # Requires the wlan0 station stanza disabled in /boot/firmware/interfaces so the
 # chip is never driven as a station (that association is what crashes the firmware).
-Environment=PI_NETZERO_IFACE=wlan0
+Environment=PI_NETZERO_IFACE=mon0
 Environment=PI_NETZERO_RELEASE_RADIO=0
 Environment=PI_NETZERO_PORT=8080
+Environment=PI_NETZERO_MONITOR_UP_CMD=mon0up
+Environment=PI_NETZERO_DOWN_IFACE=wlan0
+# Wait for the Wi-Fi phy to come up, then create mon0 (mon0up is flaky on the
+# first call on this chip, so run it twice) and free the radio by downing wlan0.
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 30); do [ -e /sys/class/ieee80211/phy0 ] && break; sleep 1; done; mon0up 2>/dev/null; mon0up 2>/dev/null; ip link set wlan0 down 2>/dev/null; true'
 ExecStart=/opt/pi-netzero/.venv/bin/python /opt/pi-netzero/main.py
 Restart=on-failure
 RestartSec=3
