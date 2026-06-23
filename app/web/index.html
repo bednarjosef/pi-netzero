@@ -131,6 +131,8 @@
   .cap .cn{font-family:ui-monospace,monospace;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cap .cs{font-size:11px;color:var(--dim);margin-top:2px}
   .cap a{color:var(--cyan);text-decoration:none;font-weight:700;font-size:13px;padding:7px 11px;background:var(--card2);border-radius:9px}
+  .pbar{height:6px;background:var(--line);border-radius:99px;margin-top:8px;overflow:hidden}
+  .pbar i{display:block;height:100%;background:linear-gradient(90deg,var(--violet),var(--cyan));border-radius:99px;transition:width .5s}
 
   /* ---------- bottom nav ---------- */
   nav{position:fixed;bottom:0;left:0;right:0;z-index:25;display:flex;
@@ -412,13 +414,19 @@ function renderInstances(list){
   const box=$('inst-card');
   if(!list.length){ box.style.display='none'; $('instances').innerHTML=''; return; }
   box.style.display='block';
-  $('instances').innerHTML = list.map(i=>`
-    <div class="cap"><span class="ci">🖥️</span>
+  $('instances').innerHTML = list.map(i=>{
+    const stage = i.progress || i.status || 'starting…';
+    const m = (i.progress||'').match(/([\d.]+)%/);
+    const pct = m ? Math.min(parseFloat(m[1]),100) : null;
+    return `<div class="cap" style="flex-wrap:wrap">
+      <span class="ci">🖥️</span>
       <div class="cm">
         <div class="cn" style="font-family:inherit">${esc(i.gpu||'GPU')} · $${i.dph}/hr ${i.location?'· 📍 '+esc(i.location):''}</div>
-        <div class="cs">${esc(i.status||'starting…')} · ${esc((i.label||'').replace('pinetzero-',''))}</div>
+        <div class="cs" style="color:var(--cyan)">⏳ ${esc(stage)}</div>
       </div>
-      <button class="red sm" onclick="destroyInst(${i.id})">Kill</button></div>`).join('');
+      <button class="red sm" onclick="destroyInst(${i.id})">Kill</button>
+      ${pct!=null?`<div class="pbar" style="flex-basis:100%"><i style="width:${pct}%"></i></div>`:''}
+    </div>`;}).join('');
 }
 function destroyInst(id){
   if(!confirm('Destroy GPU instance '+id+'? (stops billing immediately)')) return;

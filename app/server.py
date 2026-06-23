@@ -238,11 +238,13 @@ def crack_instances():
         ins = vast.instances()
     except vast.VastError as ex:
         raise HTTPException(502, detail=str(ex))
+    prog = vast.progress()
     ours = [{
         "id": i.get("id"), "label": i.get("label"),
         "status": i.get("actual_status") or i.get("cur_state"),
         "dph": round(i.get("dph_total", 0) or 0, 3), "gpu": i.get("gpu_name"),
         "location": i.get("geolocation"),
+        "progress": prog.get(i.get("label")),
     } for i in ins if str(i.get("label", "")).startswith("pinetzero-")]
     # Reconcile: a hash still marked "cracking" whose instance has self-destructed
     # is finished — flip it so the UI doesn't show it cracking forever.
