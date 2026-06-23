@@ -186,7 +186,18 @@ def stop():
 @app.get("/api/v1/captures")
 def captures():
     files = sorted(CAPTURE_DIR.glob("*.pcap"), key=lambda p: p.stat().st_mtime, reverse=True)
-    return {"captures": [{"name": f.name, "size": f.stat().st_size} for f in files]}
+    stems = netzero.store.captured_stems()
+    return {"captures": [{"name": f.name, "size": f.stat().st_size, "has_hash": f.stem in stems}
+                         for f in files]}
+
+
+@app.delete("/api/v1/captures/{name}")
+def delete_capture(name: str):
+    target = (CAPTURE_DIR / name).resolve()
+    if target.parent != CAPTURE_DIR.resolve() or not target.is_file():
+        raise HTTPException(404, detail="Not found")
+    target.unlink()
+    return {"message": "Capture deleted."}
 
 
 @app.get("/api/v1/captures/{name}")
@@ -209,6 +220,13 @@ def download_hash(name: str):
     if not e or not Path(e["file"]).is_file():
         raise HTTPException(404, detail="Not found")
     return FileResponse(e["file"], filename=name, media_type="text/plain")
+
+
+@app.delete("/api/v1/hashes/{name}")
+def delete_hash(name: str):
+    if not netzero.store.delete(name):
+        raise HTTPException(404, detail="Not found")
+    return {"message": "Hash deleted."}
 
 
 @app.post("/api/v1/crack/{name}")

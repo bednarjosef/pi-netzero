@@ -145,6 +145,15 @@
     background:var(--card2);border:1px solid var(--line2);color:var(--fg);padding:11px 16px;border-radius:12px;
     font-size:13px;font-weight:600;opacity:0;transition:.25s;z-index:40;pointer-events:none;max-width:90vw;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.5)}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .flash{position:fixed;top:calc(72px + var(--safe-t));left:50%;transform:translateX(-50%) translateY(-18px);
+    z-index:50;padding:14px 20px;border-radius:14px;font-weight:700;font-size:15px;opacity:0;transition:.3s;
+    pointer-events:none;max-width:92vw;text-align:center;box-shadow:0 14px 36px rgba(0,0,0,.6);border:1px solid var(--line2)}
+  .flash.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .flash.ok{background:#0e2c20;border-color:var(--green);color:var(--green2)}
+  .flash.warn{background:#2d2410;border-color:var(--amber);color:var(--amber)}
+  .t-hint{margin-top:10px;font-size:11.5px;line-height:1.5;color:var(--muted)}
+  .t-hint b{color:var(--fg)}
+  .note{font-size:11.5px;color:var(--muted);padding:0 14px 10px}
 </style>
 </head>
 <body>
@@ -188,6 +197,7 @@
   <section id="v-caps" class="view">
     <div class="card">
       <div class="card-h"><h2>Captures</h2><button class="ghost sm" style="padding:5px 10px" onclick="loadCaps()">Refresh</button></div>
+      <div class="note">⚠ <b>no crackable hash</b> = frames were captured but not a complete 4-way handshake — deauth again to retry. The ones with ✓ become crackable hashes in the <b>Hashes</b> tab.</div>
       <div id="caps"></div>
       <div class="empty" id="cap-empty">No captures yet. Grab a handshake or PMKID.</div>
     </div>
@@ -227,6 +237,7 @@
     <button class="amber" onclick="grabPmkid()"><span class="ic">🔑</span>PMKID</button>
     <button class="red" onclick="deauth()"><span class="ic">⚡</span><span id="deauth-label">Deauth</span></button>
   </div>
+  <div class="t-hint">🤝 <b>Handshake</b> = deauths the target <b>and auto-captures</b> the 4-way handshake. ⚡ <b>Deauth</b> = only kicks it offline (no capture). You're alerted the moment one is caught.</div>
   <div class="t-clients" id="t-clients"></div>
 </div>
 
@@ -238,6 +249,7 @@
 </nav>
 
 <div class="toast" id="toast"></div>
+<div class="flash" id="flash"></div>
 
 <script>
 const host = location.host, api = p => `http://${host}/api/v1${p}`;
@@ -262,10 +274,11 @@ function handle(m){
     case 'network': addNet(m.network); break;
     case 'client': addClient(m.client); break;
     case 'capture':
-      log(m.ok?`✓ ${m.kind} saved: ${m.file}`:`✗ ${m.kind} failed`, m.ok?'l-info':'l-err');
-      toast(m.ok?`${m.kind} captured ✓`:`${m.kind} failed`); loadCaps(); break;
+      if(m.ok){ log(`✓ ${m.kind} captured: ${m.file}`,'l-info'); }
+      else { log(`✗ ${m.kind}: no crackable handshake captured`,'l-err'); flash('⚠ Captured frames but no crackable '+m.kind+' — deauth again','warn'); }
+      loadCaps(); break;
     case 'hash':
-      upsertHash(m.hash); toast('🔓 hash extracted: '+m.hash.ssid); break;
+      upsertHash(m.hash); flash('🔓 '+m.hash.kind+' captured — “'+m.hash.ssid+'” ready to crack','ok'); loadCaps(); break;
   }
 }
 function applyState(s){ radioOn = !!s.monitor; setTask(s.task); }
@@ -357,10 +370,13 @@ async function loadCaps(){
     $('cap-empty').style.display = d.captures.length?'none':'block';
     $('caps').innerHTML = d.captures.map(c=>`
       <div class="cap"><span class="ci">${c.name.includes('pmkid')?'🔑':'🤝'}</span>
-        <div class="cm"><div class="cn">${c.name}</div><div class="cs">${(c.size/1024).toFixed(1)} KB</div></div>
-        <a href="${api('/captures/'+encodeURIComponent(c.name))}" download>↓</a></div>`).join('');
+        <div class="cm"><div class="cn">${c.name}</div>
+          <div class="cs">${(c.size/1024).toFixed(1)} KB · ${c.has_hash?'<span style="color:var(--green2)">✓ hash extracted</span>':'<span style="color:var(--amber)">⚠ no crackable hash</span>'}</div></div>
+        <a href="${api('/captures/'+encodeURIComponent(c.name))}" download>↓</a>
+        <button class="ghost sm" style="flex:0;min-width:auto;padding:7px 9px" onclick="delCap('${c.name}')">🗑</button></div>`).join('');
   }catch(e){}
 }
+function delCap(name){ if(!confirm('Delete capture?\n'+name)) return; fetch(api('/captures/'+encodeURIComponent(name)),{method:'DELETE'}).then(()=>{ toast('capture deleted'); loadCaps(); }); }
 
 // ---------- hashes / cracking ----------
 let hashes = {}, vastOn = false, hashTimer = null;
@@ -399,8 +415,10 @@ function renderHashes(){
       ${crackable
         ? `<button class="violet sm" ${vastOn?'':'disabled'} onclick="crack('${h.name}')">⚡ Crack</button>`
         : `<a href="${api('/hashes/'+encodeURIComponent(h.name))}" download>↓</a>`}
+      <button class="ghost sm" style="flex:0;min-width:auto;padding:7px 9px" onclick="delHash('${h.name}')">🗑</button>
     </div>`;}).join('');
 }
+function delHash(name){ if(!confirm('Delete this hash? (the .hc22000 file is removed)')) return; fetch(api('/hashes/'+encodeURIComponent(name)),{method:'DELETE'}).then(()=>{ toast('hash deleted'); loadHashes(); }); }
 function crack(name){
   const h = hashes[name];
   if(!confirm('⚠ Only crack networks you OWN or are authorized to test.\n\nSpin up a GPU on Vast.ai to crack "'+h.ssid+'"?\nrockyou → 8-digit numbers → all-h.txt (auto-kills ~3h).')) return;
@@ -442,6 +460,9 @@ function tab(v){ document.querySelectorAll('.view').forEach(x=>x.classList.remov
   if(v==='hash'){ loadHashes(); hashTimer=setInterval(loadHashes, 12000); }   // live job/status refresh
   if(v==='caps') loadCaps(); }
 let toastT; function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2200); }
+let flashT; function flash(msg,kind){ const f=$('flash'); f.textContent=msg; f.className='flash show '+(kind||'ok');
+  try{ if(navigator.vibrate) navigator.vibrate(kind==='warn'?80:[80,50,80]); }catch(e){}
+  clearTimeout(flashT); flashT=setTimeout(()=>{ f.className='flash'; },4200); }
 function esc(s){ return (s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 
 connect(); loadCaps(); loadHashes();

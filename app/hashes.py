@@ -106,3 +106,20 @@ class HashStore:
                 self._save()
                 return dict(self._items[name])
         return None
+
+    def delete(self, name):
+        with self._lock:
+            e = self._items.pop(name, None)
+            if e:
+                try:
+                    Path(e["file"]).unlink()
+                except OSError:
+                    pass
+                self._save()
+            return e is not None
+
+    def captured_stems(self):
+        """Source capture stems that produced a hash (a hash 'X.hc22000' came
+        from capture 'X.pcap'), so the UI can flag captures with no usable hash."""
+        with self._lock:
+            return {n.rsplit(".", 1)[0] for n in self._items}
