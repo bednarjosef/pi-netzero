@@ -72,7 +72,17 @@ def launch(label, hc22000, ssid="network"):
     res = _req("PUT", f"/asks/{offer['id']}/", body=body)
     if not res.get("success"):
         raise VastError(f"Vast create failed: {res}")
-    return {"instance_id": res.get("new_contract"),
+    iid = res.get("new_contract")
+    # Vast often creates the instance in a 'stopped' state (intended_status=
+    # stopped) where the onstart never runs — explicitly schedule it to run.
+    if iid:
+        for _ in range(3):
+            try:
+                if _req("PUT", f"/instances/{iid}/", body={"state": "running"}).get("success"):
+                    break
+            except VastError:
+                pass
+    return {"instance_id": iid,
             "dph": round(offer.get("dph_total", 0), 3),
             "gpu": offer.get("gpu_name", CRACK_GPU)}
 
