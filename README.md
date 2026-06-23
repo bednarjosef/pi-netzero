@@ -152,7 +152,54 @@ POST /api/v1/attack/handshake             {bssid, channel, client?, ssid?}
 POST /api/v1/attack/pmkid                 {bssid, ssid, channel}
 POST /api/v1/stop                         {}
 GET  /api/v1/captures | /captures/{name}
-WS   /ws/v1/stream                        live status/log/network/client/capture events
+GET  /api/v1/hashes | /hashes/{name}      captured hc22000 hashes + status
+POST /api/v1/crack/{name}                 launch a Vast.ai GPU crack for a hash
+GET  /api/v1/crack/instances              running crack jobs
+DELETE /api/v1/crack/instances/{id}       kill a crack job
+WS   /ws/v1/stream                        live status/log/network/client/capture/hash events
+```
+
+## Cracking captured hashes (Vast.ai)
+
+Successful handshakes/PMKIDs auto-convert to hashcat `hc22000` (via `hcxtools`)
+and appear in the **Hashes** tab. Tap **Crack** to rent a GPU on
+[Vast.ai](https://vast.ai) that runs hashcat **mode 22000** in stages —
+`rockyou` → all 8-digit numbers (`?d×8`) → `all-h.txt` (streamed from the
+weakpass torrent) — pushes the result to your phone via **ntfy**, and
+**self-destructs** (hard ~3h cap + on completion) so it can't drain credits.
+
+One-time setup on the Pi:
+```bash
+echo "YOUR_VAST_API_KEY" | sudo tee /opt/pi-netzero/vast.key   # from vast.ai → Account → API key
+sudo systemctl restart pi-netzero
+```
+Then install the **ntfy** app on your phone and subscribe to the topic shown at
+the top of the Hashes tab (e.g. `pinetzero-xxxx`). The Pi must have internet
+when you launch a crack (it's the Pi that calls the Vast API).
+
+## Config (env vars)
+
+| var | default | meaning |
+|---|---|---|
+| `PI_NETZERO_IFACE` | `wlan0` | Wi-Fi interface to put in monitor mode |
+| `PI_NETZERO_PORT` | `80` | HTTP port |
+| `PI_NETZERO_CAPTURES` | `<repo>/captures` | where `.pcap` files are written |
+| `PI_NETZERO_CHANNELS` | `1..11` | channels to hop while scanning |
+| `PI_NETZERO_RELEASE_RADIO` | `1` | free the radio from NetworkManager/wpa_supplicant first (set `0` on Pi-Tail) |
+| `PI_NETZERO_MONITOR_UP_CMD` | _(empty)_ | command to create the monitor vif if missing (Pi-Tail: `mon0up`) |
+| `PI_NETZERO_DOWN_IFACE` | _(empty)_ | managed iface to down so the monitor vif owns the radio (Pi-Tail: `wlan0`) |
+| `PI_NETZERO_VAST_KEY` | _(empty)_ | Vast.ai API key (or put it in `vast.key`) |
+| `PI_NETZERO_NTFY_TOPIC` | auto | ntfy.sh topic for crack notifications |
+| `PI_NETZERO_CRACK_GPU` | `RTX_4090` | GPU to rent for cracking |
+| `PI_NETZERO_CRACK_MAX_HOURS` | `3` | hard auto-kill timer on crack jobs |
+
+## ⚠️ Authorization
+
+Monitor-mode capture is passive, but **deauth, handshake, PMKID, and cracking
+are active operations**. Only run them against networks you own or are
+explicitly authorized to test. Injection on the Broadcom/Nexmon radio works but
+is less reliable than a dedicated Atheros/Realtek adapter — expect occasional
+misfires.
 ```
 
 ## Config (env vars)
