@@ -392,13 +392,17 @@ let hashes = {}, vastOn = false, hashTimer = null;
 async function loadHashes(){
   try{
     // fetch instances first — that endpoint reconciles stale "cracking" statuses
-    let inst = {instances:[]};
-    try{ inst = await (await fetch(api('/crack/instances'))).json(); }catch(e){}
     const d = await (await fetch(api('/hashes'))).json();
     vastOn = d.vast; hashes = {}; d.hashes.forEach(h=>hashes[h.name]=h);
     $('ntfy-topic').textContent = d.ntfy;
     $('vast-warn').style.display = d.vast?'none':'block';
-    renderHashes(); renderInstances(inst.instances||[]);
+    renderHashes();
+    // only contact Vast when a crack is actually running
+    let inst = {instances:[]};
+    if(d.hashes.some(h=>h.status==='cracking')){
+      try{ inst = await (await fetch(api('/crack/instances'))).json(); }catch(e){}
+    }
+    renderInstances(inst.instances||[]);
   }catch(e){}
 }
 function upsertHash(h){ hashes[h.name]=h; renderHashes(); }

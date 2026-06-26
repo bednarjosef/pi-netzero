@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
-from fastapi import Body, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
@@ -128,39 +128,26 @@ def health():
     return {"status": "alive"}
 
 
-_net_cache = {"t": 0.0, "online": False, "ip": None}
+_net_cache = {"t": 0.0, "online": False}
 
 
-def _check_online():
-    """Quick TCP probe to a public host: does the Pi have internet right now?"""
+def _online():
+    """Quick TCP probe: does the Pi have internet (i.e. tethered) right now?"""
     try:
-        s = socket.create_connection(("1.1.1.1", 443), timeout=1.5)
-        ip = s.getsockname()[0]   # the Pi's source IP on the route out
-        s.close()
-        return True, ip
+        socket.create_connection(("1.1.1.1", 443), timeout=1.5).close()
+        return True
     except OSError:
-        return False, None
-
-
-def _last_tether():
-    """The Pi's last-seen tethered IP (written by pitail-uplink-monitor), so the UI
-    can auto-switch the window there when tethering takes the link off this IP."""
-    try:
-        return (Path("/opt/pi-netzero/last-tether-ip").read_text().strip() or None)
-    except Exception:
-        return None
+        return False
 
 
 @app.get("/api/v1/net")
 def net():
-    """Internet reachability for the top-bar indicator. Online == phone tethering
-    is sharing data (Vast works); offline == local-only capture mode. Cached so
-    rapid polls don't each open a socket. `tether` is the last tethered IP."""
+    """Internet status for the top-bar indicator, cached so rapid polls don't each
+    open a socket. True == tethered (Vast can run); False == local-only capture."""
     now = time.time()
     if now - _net_cache["t"] > 8:
-        online, ip = _check_online()
-        _net_cache.update(t=now, online=online, ip=ip)
-    return {"online": _net_cache["online"], "ip": _net_cache["ip"], "tether": _last_tether()}
+        _net_cache.update(t=now, online=_online())
+    return {"online": _net_cache["online"]}
 
 
 @app.get("/api/v1/state")

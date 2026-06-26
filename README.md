@@ -266,23 +266,3 @@ are active operations**. Only run them against networks you own or are
 explicitly authorized to test. Injection on the Broadcom/Nexmon radio works but
 is less reliable than a dedicated Atheros/Realtek adapter — expect occasional
 misfires.
-```
-
-## Config (env vars)
-
-| var | default | meaning |
-|---|---|---|
-| `PI_NETZERO_IFACE` | `wlan0` | Wi-Fi interface to put in monitor mode |
-| `PI_NETZERO_PORT` | `80` | HTTP port |
-| `PI_NETZERO_CAPTURES` | `<repo>/captures` | where `.pcap` files are written |
-| `PI_NETZERO_CHANNELS` | `1..11` | channels to hop while scanning |
-| `PI_NETZERO_RELEASE_RADIO` | `1` | free the radio from NetworkManager/wpa_supplicant first (set `0` on Pi-Tail) |
-| `PI_NETZERO_MONITOR_UP_CMD` | _(empty)_ | command to create the monitor vif if missing (Pi-Tail: `mon0up`) |
-
-## ⚠️ Authorization
-
-Monitor-mode capture is passive, but **deauth, handshake, and PMKID are active
-operations**. Only run them against networks you own or are explicitly
-authorized to test. Injection on the Broadcom/Nexmon radio works but is less
-reliable than a dedicated Atheros/Realtek adapter — expect occasional misfires.
-```
