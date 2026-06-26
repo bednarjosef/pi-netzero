@@ -16,7 +16,6 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import Body, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
@@ -66,11 +65,6 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="pi-netzero", lifespan=lifespan)
-
-# Allow the UI loaded from http://netzero.box to talk to the Pi at whatever IP it
-# currently has (it switches the API host under the hood when tethering moves the
-# Pi to a new subnet) — that's a cross-origin call, so permit it.
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 # --- request bodies -----------------------------------------------------------

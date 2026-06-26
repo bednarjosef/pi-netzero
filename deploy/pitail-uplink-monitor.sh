@@ -45,9 +45,13 @@ while true; do
   if [ "$state" != "$prev" ]; then
     if [ "$state" = up ]; then
       ip=$(ip route get 1.1.1.1 2>/dev/null | grep -oE 'src [0-9.]+' | awk '{print $2}')
-      gw=$(ip route show default 2>/dev/null | grep -oE 'via [0-9.]+' | awk '{print $2}' | head -1)
-      [ -n "$ip" ] && echo "$ip" > /opt/pi-netzero/last-tether-ip 2>/dev/null   # UI auto-switches to this
-      push "✅ Pi online (tethered) — open http://${ip} · via gw ${gw} · Vast ready"
+      [ -n "$ip" ] && echo "$ip" > /opt/pi-netzero/last-tether-ip 2>/dev/null
+      log "ONLINE (tethered) -> http://${ip} (Vast ready)"
+      # tappable ntfy: tap the notification -> opens the Pi UI at its tethered IP
+      [ -n "$TOPIC" ] && [ -n "$ip" ] && curl -s -m 6 \
+        -H "Title: pi-netzero is online" -H "Tags: white_check_mark" -H "Click: http://${ip}" \
+        -d "Tethered — tap to open the UI. Vast is ready." \
+        "https://ntfy.sh/$TOPIC" >/dev/null 2>&1 || true
     fi
     prev=$state
   fi
