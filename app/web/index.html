@@ -253,7 +253,8 @@
 <div class="flash" id="flash"></div>
 
 <script>
-const host = location.host, api = p => `http://${host}/api/v1${p}`;
+let apiHost = location.host;                 // where we talk to the Pi; may change on tethering
+const api = p => `http://${apiHost}/api/v1${p}`;
 const $ = id => document.getElementById(id);
 let networks = {}, selNet = null, selClient = null, ws, scanning = false, curTask='idle', radioOn=false;
 const TASK_LABEL = {scan_networks:'Scanning networks…', scan_clients:'Scanning clients…',
@@ -261,9 +262,9 @@ const TASK_LABEL = {scan_networks:'Scanning networks…', scan_clients:'Scanning
 
 // ---------- websocket ----------
 function connect(){
-  ws = new WebSocket(`ws://${host}/ws/v1/stream`);
+  ws = new WebSocket(`ws://${apiHost}/ws/v1/stream`);
   ws.onopen = ()=>{ $('conn').classList.remove('off'); sys('connected'); };
-  ws.onclose = ()=>{ $('conn').classList.add('off'); setTimeout(connect,2500); setTimeout(maybeSwitch,1500); };
+  ws.onclose = ()=>{ $('conn').classList.add('off'); setTimeout(connect,2500); setTimeout(repoint,1500); };
   ws.onmessage = e => handle(JSON.parse(e.data));
 }
 function handle(m){
@@ -297,16 +298,13 @@ function setTask(t){
 function stopTask(){ post('/stop'); $('act-label').textContent='Stopping…'; }
 function setPill(id,cls,label){ const e=$(id); e.className='pill '+cls; e.lastChild.textContent=label; }
 
-// ---------- internet indicator + auto-switch between local-only and tethered ----------
-// When you turn on Ethernet tethering the Pi's address changes (and this window's
-// address goes unreachable). The Pi remembers its last tethered IP, so on losing
-// the connection we probe that IP and redirect the window to it — and back to the
-// 'netzero' name when tethering goes away. No ntfy, no retyping.
-let tetherIp = null, switching = false;
-const LOCAL_NAMES = ['netzero','netzero.local','192.168.42.254'];
-function uiUrl(h){ return location.protocol+'//'+h+(location.port?(':'+location.port):'')+'/'; }
+// ---------- internet indicator + stay-on-this-URL across tethering ----------
+// netzero.box stays in the address bar the whole time. When tethering moves the
+// Pi to a new IP (so the current address goes unreachable), we just re-point the
+// API + WebSocket at the Pi's new address under the hood — no URL change, no ntfy.
+let tetherIp = null, repointing = false;
 async function reachable(h){
-  try{ await fetch(location.protocol+'//'+h+'/api/v1/health',{mode:'no-cors',cache:'no-store'}); return true; }
+  try{ await fetch(`http://${h}/api/v1/health`,{mode:'no-cors',cache:'no-store'}); return true; }
   catch(e){ return false; }
 }
 async function netPoll(){
@@ -314,22 +312,20 @@ async function netPoll(){
     const d = await (await fetch(api('/net'),{cache:'no-store'})).json();
     setPill('p-net', d.online?'on':'', d.online?'internet':'offline');
     if(d.tether) tetherIp = d.tether;
-  }catch(e){ setPill('p-net','','offline'); maybeSwitch(); }
+  }catch(e){ setPill('p-net','','offline'); repoint(); }
 }
-async function maybeSwitch(){
-  if(switching) return; switching = true;
+async function repoint(){
+  if(repointing) return; repointing = true;
   try{
-    if(await reachable(location.hostname)) return;                 // still reachable -> transient blip
-    const onLocal = LOCAL_NAMES.includes(location.hostname);
-    const target = onLocal ? (tetherIp && !LOCAL_NAMES.includes(tetherIp) ? tetherIp : null) : 'netzero';
-    if(!target) return;
-    setPill('p-net','busy','switching…');
-    for(let i=0;i<20;i++){                                         // wait up to ~60s for the new address
-      if(await reachable(target)){ location.href = uiUrl(target); return; }
-      if(await reachable(location.hostname)) return;               // original came back -> abort
-      await new Promise(r=>setTimeout(r,3000));
+    if(await reachable(apiHost)) return;                        // current host still fine -> transient
+    setPill('p-net','busy','reconnecting…');
+    for(let i=0;i<30;i++){                                      // wait up to ~60s for the Pi's new address
+      for(const h of [tetherIp, location.host, '192.168.42.254'].filter(Boolean)){
+        if(h!==apiHost && await reachable(h)){ apiHost = h; try{ws.close();}catch(e){} connect(); netPoll(); return; }
+      }
+      await new Promise(r=>setTimeout(r,2000));
     }
-  } finally { switching = false; }
+  } finally { repointing = false; }
 }
 
 // ---------- networks ----------

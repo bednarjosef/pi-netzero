@@ -91,17 +91,17 @@ CDC-NCM USB-Ethernet device. There are two ways to reach it, and the
 
 **Local-only — offline capture, no tethering (default).** Just plug in. The Pi
 serves the phone an address, so with the phone's **mobile data/Wi-Fi off** you
-open **`http://netzero`** and run scans, handshakes, PMKID and deauth captures.
+open **`http://netzero.box`** and run scans, handshakes, PMKID and deauth captures.
 Everything *except* Vast.ai cracking works here — no internet needed.
 
 **Tethered — full use with mobile data ON.** Turn on **Settings → Network &
 internet → Hotspot & tethering → Ethernet tethering** (keep mobile data on). The
 **phone** now owns the link (DHCP + gateway + NAT): the Pi steps its own DHCP
-server aside and accepts the phone's address. The **open window auto-switches**
-to that address itself (the Pi remembers its tethered IP) — and also **pushes the
-URL to ntfy** as a backup, e.g. `✅ Pi online — open http://10.21.224.60`. The
-phone keeps mobile data, reaches the UI, **and** the Pi gets the internet Vast.ai
-needs.
+server aside and accepts the phone's address. The **page stays on
+`http://netzero.box`** and re-points its API/WebSocket to the Pi's new address
+under the hood (the Pi remembers its tethered IP) — and ntfy still fires as a
+backup, e.g. `✅ Pi online — open http://10.21.224.60`. The phone keeps mobile
+data, reaches the UI, **and** the Pi gets the internet Vast.ai needs.
 
 > **Why two modes?** With mobile data ON, Android refuses to route the browser to
 > a USB network that has no internet of its own — so a plain plug-in won't load
@@ -113,17 +113,20 @@ needs.
 > `192.168.42.254` is also the address for a directly-wired laptop (laptop side
 > static `192.168.42.129/24`).
 
-> **Name instead of an IP, and no port.** The app serves on port 80, so just
-> **`http://netzero`** — no `:8080`. It resolves on the **phone** (local-only) via
-> DHCP-served DNS (the Pi hands itself out as the resolver), and on the **laptop**
-> as **`http://netzero.local`** (mDNS); to use the bare `http://netzero` on the
-> laptop too, add `192.168.42.254 netzero` to its `/etc/hosts`.
+> **One name, any device, no setup, no port: `http://netzero.box`.** The Pi runs a
+> DHCP DNS server that hands out itself as the resolver plus a `box` domain, so any
+> device on **DHCP** (the default — phone *or* laptop) resolves `netzero.box` to
+> the Pi with zero configuration. (A laptop pinned to a *static* IP won't, because
+> it isn't using the Pi's DNS — leave it on DHCP.) `netzero.local` (mDNS) also
+> works on the laptop. Bare `netzero` works on Android too, but Ubuntu won't
+> resolve single-label names, hence the dotted `netzero.box`.
 >
-> **Auto-switch across modes.** The UI remembers the Pi's tethered IP, so when you
-> turn Ethernet tethering on/off the open window **redirects itself** to the right
-> address — no reading the ntfy or retyping. (The first time you ever tether, use
-> the ntfy link once so the Pi learns its tethered IP.) The top bar's **internet**
-> indicator is green when tethered (Vast works), grey in local-only.
+> **Stays on that URL across tethering.** Turning Ethernet tethering on/off changes
+> the Pi's IP, but the page **keeps the `netzero.box` URL** and just re-points its
+> API/WebSocket at the Pi's new address under the hood (that's what the CORS header
+> is for) — no ntfy, no retyping, no IP in the address bar. (The first time you
+> ever tether, the Pi learns its tethered IP; ntfy still fires as a backup.) The
+> top-bar **internet** indicator is green when tethered (Vast works), grey local-only.
 
 > **Gadget protocol & a dead end.** `pi-tail-ncm.service` swaps Pi-Tail's stock
 > `g_ether` (whose RNDIS config modern Android can't drive — it shows only
@@ -156,9 +159,9 @@ The phone then reaches the UI at **http://10.55.0.1**.
    **USB** port, not `PWR`). On **Pi-Tail** the phone powers the Pi — **no power
    bank** (a second 5 V source on the Zero's shared rail drops the link); see Power.
 2. Open the UI:
-   - **Pi-Tail, offline capture** (no internet): mobile data off → **http://netzero**.
-   - **Pi-Tail, with internet** (Vast): turn on **Ethernet tethering** (data ON) —
-     the open window auto-switches to the tethered address (or use the ntfy link).
+   - **Pi-Tail** (offline capture *or* Vast): open **http://netzero.box**, data off.
+     Turn on **Ethernet tethering** (data ON) for internet — the page stays on the
+     same URL and re-points itself; no ntfy needed.
    - **Plain image:** **http://10.55.0.1**.
 3. **Scan Networks** → tap a network to target it → **Scan Clients**,
    **Handshake**, **PMKID**, or **Deauth**. Captures appear in the Captures
