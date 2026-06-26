@@ -1,5 +1,5 @@
 [Unit]
-Description=pi-netzero USB-Ethernet gadget (RNDIS) + DHCP for usb0
+Description=pi-netzero USB-Ethernet gadget (CDC NCM) + DHCP for usb0
 After=sys-kernel-config.mount
 Wants=sys-kernel-config.mount
 Before=pi-netzero.service

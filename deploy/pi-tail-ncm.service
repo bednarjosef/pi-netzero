@@ -1,0 +1,17 @@
+[Unit]
+Description=Swap Pi-Tail USB gadget from g_ether (RNDIS) to CDC NCM for Android
+ConditionPathExists=/usr/local/sbin/pi-tail-ncm.sh
+After=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# g_ether is loaded from cmdline.txt at boot and stays the fail-safe link; give
+# it a moment to settle, then swap to CDC NCM so a modern Android host (Pixel)
+# binds the gadget instead of falling back to "Charging connected device...".
+ExecStartPre=/bin/sleep 8
+ExecStart=/usr/local/sbin/pi-tail-ncm.sh up
+ExecStop=/usr/local/sbin/pi-tail-ncm.sh down
+
+[Install]
+WantedBy=multi-user.target

@@ -47,16 +47,46 @@ if [ -f "$IFACES" ] && grep -q '^allow-hotplug wlan0' "$IFACES"; then
 fi
 systemctl mask wpa_supplicant >/dev/null 2>&1 || true
 
-echo "[*] Installing usb0 DHCP server (so a plugged-in phone/PC auto-gets an IP)"
-# Pi-Tail runs no DHCP on usb0, so connected devices never get an address and
-# can't reach the UI. This serves one, bound to usb0 only.
+# usb0 DHCP *server* (dnsmasq): installed but LEFT DISABLED on purpose. The phone
+# reaches the Pi via Ethernet tethering, where the *phone* is the DHCP server +
+# gateway; a second DHCP server on this link makes Android pick a conflicting
+# subnet and nothing connects. The Pi instead runs a DHCP *client* (the uplink
+# monitor) to accept the phone's address. Enable this only for direct PC use
+# without a static IP:  sudo systemctl enable --now pi-netzero-usb-dhcp
+echo "[*] Installing usb0 DHCP server config (left disabled — see note)"
 install -m 644 "$APP/deploy/dnsmasq-usb0-pitail.conf" /etc/dnsmasq-usb0.conf
 install -m 644 "$APP/deploy/pi-netzero-usb-dhcp.service" /etc/systemd/system/
+
+# Pi-Tail's stock gadget is g_ether (RNDIS + CDC). Modern Android (Pixel etc.)
+# can't drive the RNDIS config and shows only "Charging connected device...".
+# Swap to a CDC NCM-only gadget after boot (g_ether stays the cmdline fail-safe).
+echo "[*] Installing CDC NCM gadget swap (Android compatibility)"
+install -m 755 "$APP/deploy/pi-tail-ncm.sh" /usr/local/sbin/pi-tail-ncm.sh
+install -m 644 "$APP/deploy/pi-tail-ncm.service" /etc/systemd/system/
+
+# Uplink monitor: pushes a ✅/⚠️ to ntfy when the Pi gains/loses internet (e.g.
+# when you turn on Ethernet tethering on the phone), with the IP + gateway it got.
+install -m 755 "$APP/deploy/pitail-uplink-monitor.sh" /usr/local/sbin/pitail-uplink-monitor.sh
+install -m 644 "$APP/deploy/pitail-uplink-monitor.service" /etc/systemd/system/
+
+# Force the USB-OTG port to peripheral. The Pi is always a USB *device* (the CDC
+# NCM gadget above); internet comes back from the phone over Ethernet tethering,
+# not USB host mode — a micro-USB↔USB-C cable can't ground the Pi's ID pin to make
+# it a host anyway. Peripheral also avoids dr_mode=otg's VBUS sensing tearing down
+# the gadget when a second 5V source (power bank) is attached.
+BOOTCFG=/boot/firmware/config.txt
+[ -f "$BOOTCFG" ] || BOOTCFG=/boot/config.txt
+if grep -qE '^dtoverlay=dwc2(,dr_mode=otg)?$' "$BOOTCFG"; then
+  echo "[*] Forcing dwc2 peripheral mode in $BOOTCFG (backup: $BOOTCFG.bak-pinetzero)"
+  cp -a "$BOOTCFG" "$BOOTCFG.bak-pinetzero"
+  sed -i -E 's/^dtoverlay=dwc2(,dr_mode=otg)?$/dtoverlay=dwc2,dr_mode=peripheral/' "$BOOTCFG"
+fi
 
 echo "[*] Installing + enabling the app service"
 install -m 644 "$APP/deploy/pi-netzero-pitail.service" /etc/systemd/system/pi-netzero.service
 systemctl daemon-reload
-systemctl enable pi-netzero.service pi-netzero-usb-dhcp.service
+systemctl disable pi-netzero-usb-dhcp.service 2>/dev/null || true   # off: conflicts with Ethernet tethering
+systemctl enable pi-netzero.service pi-tail-ncm.service pitail-uplink-monitor.service
 
 cat <<'EOF'
 

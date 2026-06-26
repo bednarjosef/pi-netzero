@@ -57,7 +57,7 @@ Finish up:
   1. Reboot so dwc2 loads:                 sudo reboot
   2. Power the Pi from a power bank via the PWR port; run a data cable from the
      Pi's USB port (inner, labelled "USB") to your Android phone.
-  3. The phone auto-detects a wired/RNDIS link. Open a browser to:
+  3. The phone auto-detects a wired/NCM link. Open a browser to:
                                            http://10.55.0.1
   4. Sanity-check onboard monitor mode (Kali + Nexmon):
                                            sudo iw dev wlan0 set type monitor

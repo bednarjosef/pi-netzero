@@ -9,7 +9,7 @@ It fuses the working scapy logic from `netzero` (streaming scanner) and
 service with a touch-friendly web UI.
 
 ```
- ┌──────────┐   USB cable (RNDIS Ethernet)    ┌────────────────┐  onboard Wi-Fi  ┌────────────┐
+ ┌──────────┐   USB cable (CDC NCM Ethernet)  ┌────────────────┐  onboard Wi-Fi  ┌────────────┐
  │ Android  │◄═══════════════════════════════►│  Pi Zero 2 W   │  monitor (Nexmon)│ your network│
  │ browser  │  http://10.55.0.1               │  wlan0 → monitor│════════════════►│            │
  └──────────┘                                 └────────────────┘                 └────────────┘
@@ -20,8 +20,13 @@ service with a touch-friendly web UI.
 A single radio can't be in monitor mode **and** be your phone's Wi-Fi link at the
 same time — monitor mode detaches the interface from all networking. So the
 control channel is moved off Wi-Fi onto **USB**: the Pi presents itself as a
-USB-Ethernet (RNDIS) device, the phone reaches the web UI at `http://10.55.0.1`,
+USB-Ethernet (CDC NCM) device, the phone reaches the web UI at `http://10.55.0.1`,
 and the Wi-Fi radio is free to capture the whole time.
+
+> **Why NCM, not RNDIS?** Modern Android (Pixel and others) dropped the RNDIS
+> USB-host driver, so an RNDIS gadget only ever shows up as "Charging connected
+> device…" with no network interface. CDC NCM is supported natively by Android,
+> Linux, macOS and Windows 10/11.
 
 The DHCP handed to the phone advertises **no default route**, so plugging in the
 Pi never steals the phone's cellular internet.
@@ -77,9 +82,36 @@ owns the channel. Notes on why each is needed:
 - **`DOWN_IFACE=wlan0`** — leaving `wlan0` up pins the radio's channel and
   starves the hopping monitor vif (scans come back empty).
 
-Then from your phone (connected to Pi-Tail over USB) open
-**`http://<pi-tail-ip>:8080`** — the same IP you SSH to Pi-Tail on
-(`ip a show usb0`; for a PC over USB it's `192.168.42.254`).
+#### Reaching the UI from the phone — Ethernet tethering
+
+Connect the Pi to the phone with a **plain micro-USB↔USB-C cable** (the phone is
+the USB host and powers the Pi). Then on the phone turn on **Settings → Network &
+internet → Hotspot & tethering → Ethernet tethering**, keeping **mobile data ON**.
+
+The Pi presents as a CDC-NCM USB-Ethernet device, and "Ethernet tethering" makes
+the **phone** the gateway / DHCP / NAT on that link. The Pi runs a DHCP *client*
+(`pitail-uplink-monitor.service`), accepts the phone's address, and **pushes the
+URL to open to ntfy** — e.g. `✅ Pi ONLINE — open http://10.21.224.60:8080`.
+Open that phone-assigned IP (normally stable per phone). With this one toggle the
+phone keeps mobile data, reaches the UI, **and** the Pi gets the internet the
+Vast.ai cracking needs — all at once.
+
+> **Why the toggle, and why is the Pi's DHCP server off?** With mobile data on,
+> Android refuses to route the browser to a USB network that has no internet of
+> its own, so a plain plug-in won't load. Ethernet tethering flips the roles (the
+> phone owns the link), which fixes reachability *and* feeds the Pi internet. The
+> Pi's own DHCP server (`pi-netzero-usb-dhcp`) is therefore left **disabled** — if
+> it runs, Android sees a conflicting subnet and nothing connects. The static
+> `192.168.42.254` is only for a directly-wired laptop (set it static to
+> `192.168.42.129/24`).
+
+> **Gadget protocol & a dead end.** `pi-tail-ncm.service` swaps Pi-Tail's stock
+> `g_ether` (whose RNDIS config modern Android can't drive — it shows only
+> "Charging connected device…") to **CDC NCM** at boot; `g_ether` stays in
+> `cmdline.txt` as a fail-safe. USB *host* mode (to use ordinary phone USB
+> tethering) does **not** work over a micro-USB↔USB-C cable: it can't ground the
+> Pi's OTG ID pin, so the Pi stays a device — hence Ethernet tethering is the
+> path.
 
 > Onboard Nexmon monitor on the Zero 2 W is real but **marginal** — capture
 > counts vary run to run and injection is less reliable than a dedicated
@@ -100,24 +132,28 @@ The phone then reaches the UI at **http://10.55.0.1**.
 
 ## Use
 
-1. Power the Pi from a power bank via the **PWR** port.
-2. Run a data cable from the Pi's **USB** port (the inner one, labelled `USB`,
-   not `PWR`) to your phone.
-3. Open the UI: **`http://<pi-tail-ip>:8080`** (Pi-Tail) or **http://10.55.0.1**
-   (plain image).
-4. **Scan Networks** → tap a network to target it → **Scan Clients**,
+1. Connect the Pi to your phone with a plain micro-USB↔USB-C cable (Pi's inner
+   **USB** port, not `PWR`). On **Pi-Tail** the phone powers the Pi — **no power
+   bank** (a second 5 V source on the Zero's shared rail drops the link); see Power.
+2. **Pi-Tail:** turn on **Ethernet tethering** (mobile data ON) and open the
+   `http://<ip>:8080` from the ntfy push. **Plain image:** open **http://10.55.0.1**.
+3. **Scan Networks** → tap a network to target it → **Scan Clients**,
    **Handshake**, **PMKID**, or **Deauth**. Captures appear in the Captures
    panel as downloadable `.pcap` files.
 
-> If the page doesn't load on first plug-in, some Android builds need a moment to
-> bring up the wired link, or a toggle in *Settings → Network → Ethernet*.
-
 ## Power
 
-Powering the Pi *and* a Wi-Fi capture purely from a phone's USB-OTG port is
-unreliable (many phones limit OTG current, and a brownout corrupts the capture).
-**Recommended:** power bank → Pi `PWR` port, and data cable → phone. The Pi draws
-from the power bank; the phone only carries data.
+The Zero 2 W ties both micro-USB ports to one 5 V rail, so you **can't just add a
+power bank** while the phone also powers the data port — the two sources fight and
+the USB link drops. With the **Ethernet-tethering** setup the **phone powers the
+Pi** over the single data cable (no power bank).
+
+Phone-only power is fine for the control link and light use, but a Zero 2 W doing
+sustained capture on phone power alone can brown out (corrupting a capture). For
+heavy sessions, power the Pi from a power bank on **PWR** and use a **data-only
+(power-blocking)** cable to the phone so it carries data without VBUS — that
+avoids the contention. (The plain-image path doesn't tether, so it can just use
+power bank → `PWR`, data cable → phone.)
 
 ## Layout
 
@@ -131,12 +167,16 @@ app/
   server.py       FastAPI: REST + WebSocket, serves the UI, capture downloads
   web/index.html  mobile-first control surface
 deploy/
-  usb_gadget.sh           RNDIS USB-Ethernet gadget up/down (+ dnsmasq)
+  usb_gadget.sh           CDC NCM USB-Ethernet gadget up/down (+ dnsmasq)
   dnsmasq-usb0.conf        DHCP for the cable, no default route
   pi-netzero-usb.service   systemd: bring the gadget up at boot (plain image)
   pi-netzero.service       systemd: run the server (plain image)
   install.sh               installer (plain Kali image, self-contained)
   pi-netzero-pitail.service systemd: run the server on Pi-Tail (app only)
+  pi-tail-ncm.sh           swap Pi-Tail's g_ether(RNDIS) gadget -> CDC NCM (Android)
+  pi-tail-ncm.service      systemd: apply the NCM swap on boot (Pi-Tail)
+  pitail-uplink-monitor.sh DHCP client for the phone's Ethernet tethering + ntfy online status (Pi-Tail)
+  pitail-uplink-monitor.service systemd: run the uplink monitor (Pi-Tail)
   install-pitail.sh        installer for Pi-Tail (app only, no USB gadget)
 main.py           entrypoint (sudo .venv/bin/python main.py)
 ```
@@ -174,8 +214,10 @@ echo "YOUR_VAST_API_KEY" | sudo tee /opt/pi-netzero/vast.key   # from vast.ai �
 sudo systemctl restart pi-netzero
 ```
 Then install the **ntfy** app on your phone and subscribe to the topic shown at
-the top of the Hashes tab (e.g. `pinetzero-xxxx`). The Pi must have internet
-when you launch a crack (it's the Pi that calls the Vast API).
+the top of the Hashes tab (e.g. `pinetzero-xxxx`). The Pi must have internet when
+you launch a crack (it's the Pi that calls the Vast API) — that's exactly what the
+**Ethernet tethering** link above provides; the `pitail-uplink-monitor` ntfy push
+confirms the Pi is online before you crack.
 
 ## Config (env vars)
 
