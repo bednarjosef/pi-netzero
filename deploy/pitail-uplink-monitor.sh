@@ -4,14 +4,14 @@
 #   * LOCAL-ONLY (default): no tethering -> the Pi serves DHCP (dnsmasq) so a
 #     plugged-in phone gets an address and can reach the UI at 192.168.42.254 for
 #     offline work (scan / handshake / PMKID / capture). No internet required.
-#   * TETHERED: you switch ON "Ethernet tethering" on the phone -> the PHONE
-#     becomes DHCP server + gateway + NAT. The monitor STOPS its own DHCP server
-#     (so the Pi's dhclient hears the phone, not itself), grabs the phone's lease
-#     (giving the Pi internet for Vast.ai), and pushes the URL to open to ntfy.
+#   * TETHERED: you switch ON "Ethernet tethering" -> the PHONE becomes DHCP +
+#     gateway + NAT. The monitor stops its DHCP server, grabs the phone's lease
+#     (Pi gets internet for Vast.ai), and pushes the URL to open to ntfy.
 #
-# It probes for tethering ~every 60s by briefly stopping its DHCP server and
-# asking for a lease; an active local-only phone keeps its address across that
-# blip (the lease is held client-side). Only ever touches usb0; never wlan0/mon0.
+# Local-only is kept bulletproof: dnsmasq is ALWAYS up while the link is, and we
+# only probe for tethering after the link has been serving for ~90s and then
+# only every ~90s — so the probe can never race the phone's initial DHCP (the bug
+# that left a freshly plugged-in phone with no address). Only ever touches usb0.
 LOG=/opt/pi-netzero/uplink.log
 TOPIC=$(cat /opt/pi-netzero/ntfy.topic 2>/dev/null)
 DHCP=pi-netzero-usb-dhcp.service
@@ -23,24 +23,25 @@ serve_off(){ systemctl is-active --quiet "$DHCP" && { systemctl stop  "$DHCP" 2>
 
 log "===== monitor (re)started ====="
 prev=init
-n=0
+up=0
 while true; do
   ip addr add 192.168.42.254/24 dev usb0 2>/dev/null || true   # keep the stable local address
   state=down
   if online; then
-    serve_off                                    # tethered with internet
-    state=up
+    serve_off; state=up; up=0                  # tethered with internet
   elif ip link show usb0 up >/dev/null 2>&1; then
-    if [ $((n % 6)) -eq 0 ]; then                # ~every 60s: look for fresh tethering
+    up=$((up + 1))
+    serve_on                                   # ALWAYS serve so a connecting phone finds DHCP
+    if [ "$up" -ge 9 ] && [ $((up % 9)) -eq 0 ]; then   # first probe ~90s after link-up, then every ~90s
       serve_off
       ip route flush default 2>/dev/null || true
       rm -f /var/lib/dhcp/dhclient.usb0.leases /var/lib/dhcp/dhclient.leases 2>/dev/null
-      timeout 10 dhclient -1 usb0 >>"$LOG" 2>&1 || true
-      if online; then state=up; else serve_on; fi # got tether internet, else back to local-only
-    else
-      serve_on                                   # local-only: keep serving the phone
+      timeout 8 dhclient -1 usb0 >>"$LOG" 2>&1 || true
+      ip addr add 192.168.42.254/24 dev usb0 2>/dev/null || true   # restore immediately
+      if online; then state=up; else serve_on; fi
     fi
-    n=$((n + 1))
+  else
+    up=0
   fi
   if [ "$state" != "$prev" ]; then
     if [ "$state" = up ]; then
