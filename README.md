@@ -112,13 +112,17 @@ the Pi gets the internet Vast.ai needs.
 > `192.168.42.254` is also the address for a directly-wired laptop (laptop side
 > static `192.168.42.129/24`).
 
-> **Name instead of an IP.** The Pi advertises itself over mDNS, so on a device
-> that resolves `.local` you can just open **`http://pitail.local:8080`** in
-> either mode (avahi follows `usb0`'s current address). This always works on the
-> laptop; on Android it depends on the browser — if it doesn't resolve, use the
-> IP (bookmark `192.168.42.254` for local-only; the tethered IP is in the ntfy
-> push and is normally stable per phone). The top bar also shows an **internet**
-> indicator: green when tethered (Vast works), grey in local-only mode.
+> **Name instead of an IP.** Two names point at the Pi:
+> - **`http://netzero.local:8080`** (mDNS) — works on the **laptop**; Android's
+>   browser does *not* resolve `.local`.
+> - **`http://netzero:8080`** (DHCP-served DNS) — works on the **phone in
+>   local-only mode**: the Pi hands itself out as the DNS resolver and answers
+>   that name. (In *tethered* mode the phone uses its own DNS, so open the IP from
+>   the ntfy push — stable per phone — or "Add to Home Screen" once for a
+>   tap-to-open icon.)
+>
+> The top bar also shows an **internet** indicator: green when tethered (Vast
+> works), grey in local-only mode.
 
 > **Gadget protocol & a dead end.** `pi-tail-ncm.service` swaps Pi-Tail's stock
 > `g_ether` (whose RNDIS config modern Android can't drive — it shows only

@@ -69,15 +69,15 @@ install -m 644 "$APP/deploy/pi-tail-ncm.service" /etc/systemd/system/
 install -m 755 "$APP/deploy/pitail-uplink-monitor.sh" /usr/local/sbin/pitail-uplink-monitor.sh
 install -m 644 "$APP/deploy/pitail-uplink-monitor.service" /etc/systemd/system/
 
-# mDNS: reach the Pi by name -- http://pitail.local:8080 -- instead of an IP, in
-# either mode (avahi advertises usb0's current address). Restricted to usb0 so it
-# never advertises on the monitor-mode radio.
-echo "[*] Setting up mDNS name pitail.local (usb0 only)"
+# mDNS: reach the Pi by name -- http://netzero.local:8080 -- on devices that
+# resolve .local (the laptop; Android's browser does not). avahi follows usb0's
+# current address and is restricted to usb0 so it never touches the monitor radio.
+echo "[*] Setting up mDNS name netzero.local (usb0 only)"
 apt-get install -y avahi-daemon >/dev/null 2>&1 || true
 AVAHI=/etc/avahi/avahi-daemon.conf
 if [ -f "$AVAHI" ]; then
-  sed -i -E 's/^#?host-name=.*/host-name=pitail/' "$AVAHI"
-  grep -q '^host-name=' "$AVAHI" || sed -i '/^\[server\]/a host-name=pitail' "$AVAHI"
+  sed -i -E 's/^#?host-name=.*/host-name=netzero/' "$AVAHI"
+  grep -q '^host-name=' "$AVAHI" || sed -i '/^\[server\]/a host-name=netzero' "$AVAHI"
   sed -i -E 's/^#?allow-interfaces=.*/allow-interfaces=usb0/' "$AVAHI"
   grep -q '^allow-interfaces=' "$AVAHI" || sed -i '/^\[server\]/a allow-interfaces=usb0' "$AVAHI"
   systemctl enable avahi-daemon >/dev/null 2>&1 || true
