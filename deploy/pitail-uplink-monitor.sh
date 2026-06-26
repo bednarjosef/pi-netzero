@@ -46,7 +46,8 @@ while true; do
     if [ "$state" = up ]; then
       ip=$(ip route get 1.1.1.1 2>/dev/null | grep -oE 'src [0-9.]+' | awk '{print $2}')
       gw=$(ip route show default 2>/dev/null | grep -oE 'via [0-9.]+' | awk '{print $2}' | head -1)
-      push "✅ Pi online (tethered) — open http://${ip}:8080 · via gw ${gw} · Vast ready"
+      [ -n "$ip" ] && echo "$ip" > /opt/pi-netzero/last-tether-ip 2>/dev/null   # UI auto-switches to this
+      push "✅ Pi online (tethered) — open http://${ip} · via gw ${gw} · Vast ready"
     fi
     prev=$state
   fi

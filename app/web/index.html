@@ -263,7 +263,7 @@ const TASK_LABEL = {scan_networks:'Scanning networks…', scan_clients:'Scanning
 function connect(){
   ws = new WebSocket(`ws://${host}/ws/v1/stream`);
   ws.onopen = ()=>{ $('conn').classList.remove('off'); sys('connected'); };
-  ws.onclose = ()=>{ $('conn').classList.add('off'); setTimeout(connect,2500); };
+  ws.onclose = ()=>{ $('conn').classList.add('off'); setTimeout(connect,2500); setTimeout(maybeSwitch,1500); };
   ws.onmessage = e => handle(JSON.parse(e.data));
 }
 function handle(m){
@@ -296,10 +296,40 @@ function setTask(t){
 }
 function stopTask(){ post('/stop'); $('act-label').textContent='Stopping…'; }
 function setPill(id,cls,label){ const e=$(id); e.className='pill '+cls; e.lastChild.textContent=label; }
+
+// ---------- internet indicator + auto-switch between local-only and tethered ----------
+// When you turn on Ethernet tethering the Pi's address changes (and this window's
+// address goes unreachable). The Pi remembers its last tethered IP, so on losing
+// the connection we probe that IP and redirect the window to it — and back to the
+// 'netzero' name when tethering goes away. No ntfy, no retyping.
+let tetherIp = null, switching = false;
+const LOCAL_NAMES = ['netzero','netzero.local','192.168.42.254'];
+function uiUrl(h){ return location.protocol+'//'+h+(location.port?(':'+location.port):'')+'/'; }
+async function reachable(h){
+  try{ await fetch(location.protocol+'//'+h+'/api/v1/health',{mode:'no-cors',cache:'no-store'}); return true; }
+  catch(e){ return false; }
+}
 async function netPoll(){
-  try{ const d = await (await fetch(api('/net'))).json();
+  try{
+    const d = await (await fetch(api('/net'),{cache:'no-store'})).json();
     setPill('p-net', d.online?'on':'', d.online?'internet':'offline');
-  }catch(e){ setPill('p-net','','offline'); }
+    if(d.tether) tetherIp = d.tether;
+  }catch(e){ setPill('p-net','','offline'); maybeSwitch(); }
+}
+async function maybeSwitch(){
+  if(switching) return; switching = true;
+  try{
+    if(await reachable(location.hostname)) return;                 // still reachable -> transient blip
+    const onLocal = LOCAL_NAMES.includes(location.hostname);
+    const target = onLocal ? (tetherIp && !LOCAL_NAMES.includes(tetherIp) ? tetherIp : null) : 'netzero';
+    if(!target) return;
+    setPill('p-net','busy','switching…');
+    for(let i=0;i<20;i++){                                         // wait up to ~60s for the new address
+      if(await reachable(target)){ location.href = uiUrl(target); return; }
+      if(await reachable(location.hostname)) return;               // original came back -> abort
+      await new Promise(r=>setTimeout(r,3000));
+    }
+  } finally { switching = false; }
 }
 
 // ---------- networks ----------

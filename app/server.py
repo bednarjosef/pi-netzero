@@ -142,16 +142,25 @@ def _check_online():
         return False, None
 
 
+def _last_tether():
+    """The Pi's last-seen tethered IP (written by pitail-uplink-monitor), so the UI
+    can auto-switch the window there when tethering takes the link off this IP."""
+    try:
+        return (Path("/opt/pi-netzero/last-tether-ip").read_text().strip() or None)
+    except Exception:
+        return None
+
+
 @app.get("/api/v1/net")
 def net():
     """Internet reachability for the top-bar indicator. Online == phone tethering
     is sharing data (Vast works); offline == local-only capture mode. Cached so
-    rapid polls don't each open a socket."""
+    rapid polls don't each open a socket. `tether` is the last tethered IP."""
     now = time.time()
     if now - _net_cache["t"] > 8:
         online, ip = _check_online()
         _net_cache.update(t=now, online=online, ip=ip)
-    return {"online": _net_cache["online"], "ip": _net_cache["ip"]}
+    return {"online": _net_cache["online"], "ip": _net_cache["ip"], "tether": _last_tether()}
 
 
 @app.get("/api/v1/state")
