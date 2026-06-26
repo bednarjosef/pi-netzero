@@ -42,7 +42,8 @@
     border-radius:50%;animation:spin .8s linear infinite;flex:0 0 auto}
   @keyframes spin{to{transform:rotate(360deg)}}
   .brand{display:flex; align-items:center; gap:9px; font-weight:700; letter-spacing:.3px}
-  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan);transition:background .2s}
+  .brand .dot.off{background:var(--dim);box-shadow:none}
   .brand b{color:var(--cyan)} .brand span{color:var(--muted);font-weight:600}
   .pills{display:flex; gap:6px; align-items:center}
   .pill{font-size:11px;font-weight:600;padding:4px 9px;border-radius:999px;border:1px solid var(--line2);
@@ -160,10 +161,10 @@
 
 <header>
   <div class="hrow">
-    <div class="brand"><span class="dot"></span><b>pi</b><span>·netzero</span></div>
+    <div class="brand"><span class="dot" id="conn"></span><b>pi</b><span>·netzero</span></div>
     <div class="pills">
       <span id="p-radio" class="pill"><span class="led"></span>radio</span>
-      <span id="p-link" class="pill"><span class="led"></span>link</span>
+      <span id="p-net" class="pill"><span class="led"></span>internet</span>
     </div>
   </div>
   <div id="activity">
@@ -261,8 +262,8 @@ const TASK_LABEL = {scan_networks:'Scanning networks…', scan_clients:'Scanning
 // ---------- websocket ----------
 function connect(){
   ws = new WebSocket(`ws://${host}/ws/v1/stream`);
-  ws.onopen = ()=>{ setPill('p-link','on','link'); sys('connected'); };
-  ws.onclose = ()=>{ setPill('p-link','','link'); setTimeout(connect,2500); };
+  ws.onopen = ()=>{ $('conn').classList.remove('off'); sys('connected'); };
+  ws.onclose = ()=>{ $('conn').classList.add('off'); setTimeout(connect,2500); };
   ws.onmessage = e => handle(JSON.parse(e.data));
 }
 function handle(m){
@@ -295,6 +296,11 @@ function setTask(t){
 }
 function stopTask(){ post('/stop'); $('act-label').textContent='Stopping…'; }
 function setPill(id,cls,label){ const e=$(id); e.className='pill '+cls; e.lastChild.textContent=label; }
+async function netPoll(){
+  try{ const d = await (await fetch(api('/net'))).json();
+    setPill('p-net', d.online?'on':'', d.online?'internet':'offline');
+  }catch(e){ setPill('p-net','','offline'); }
+}
 
 // ---------- networks ----------
 function bars(pwr){ // -30 strong .. -90 weak
@@ -465,7 +471,7 @@ let flashT; function flash(msg,kind){ const f=$('flash'); f.textContent=msg; f.c
   clearTimeout(flashT); flashT=setTimeout(()=>{ f.className='flash'; },4200); }
 function esc(s){ return (s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 
-connect(); loadCaps(); loadHashes();
+connect(); loadCaps(); loadHashes(); netPoll(); setInterval(netPoll, 10000);
 </script>
 </body>
 </html>

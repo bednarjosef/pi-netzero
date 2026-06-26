@@ -64,10 +64,24 @@ echo "[*] Installing CDC NCM gadget swap (Android compatibility)"
 install -m 755 "$APP/deploy/pi-tail-ncm.sh" /usr/local/sbin/pi-tail-ncm.sh
 install -m 644 "$APP/deploy/pi-tail-ncm.service" /etc/systemd/system/
 
-# Uplink monitor: pushes a ✅/⚠️ to ntfy when the Pi gains/loses internet (e.g.
-# when you turn on Ethernet tethering on the phone), with the IP + gateway it got.
+# Uplink monitor: serves DHCP for offline use, hands the link to the phone when
+# you enable Ethernet tethering, and pushes the URL/status to ntfy.
 install -m 755 "$APP/deploy/pitail-uplink-monitor.sh" /usr/local/sbin/pitail-uplink-monitor.sh
 install -m 644 "$APP/deploy/pitail-uplink-monitor.service" /etc/systemd/system/
+
+# mDNS: reach the Pi by name -- http://pitail.local:8080 -- instead of an IP, in
+# either mode (avahi advertises usb0's current address). Restricted to usb0 so it
+# never advertises on the monitor-mode radio.
+echo "[*] Setting up mDNS name pitail.local (usb0 only)"
+apt-get install -y avahi-daemon >/dev/null 2>&1 || true
+AVAHI=/etc/avahi/avahi-daemon.conf
+if [ -f "$AVAHI" ]; then
+  sed -i -E 's/^#?host-name=.*/host-name=pitail/' "$AVAHI"
+  grep -q '^host-name=' "$AVAHI" || sed -i '/^\[server\]/a host-name=pitail' "$AVAHI"
+  sed -i -E 's/^#?allow-interfaces=.*/allow-interfaces=usb0/' "$AVAHI"
+  grep -q '^allow-interfaces=' "$AVAHI" || sed -i '/^\[server\]/a allow-interfaces=usb0' "$AVAHI"
+  systemctl enable avahi-daemon >/dev/null 2>&1 || true
+fi
 
 # Force the USB-OTG port to peripheral. The Pi is always a USB *device* (the CDC
 # NCM gadget above); internet comes back from the phone over Ethernet tethering,

@@ -8,6 +8,7 @@ connected WebSocket.
 import asyncio
 import json
 import re
+import socket
 import time
 from asyncio import Queue
 from contextlib import asynccontextmanager
@@ -125,6 +126,32 @@ async def stream(ws: WebSocket):
 @app.get("/api/v1/health")
 def health():
     return {"status": "alive"}
+
+
+_net_cache = {"t": 0.0, "online": False, "ip": None}
+
+
+def _check_online():
+    """Quick TCP probe to a public host: does the Pi have internet right now?"""
+    try:
+        s = socket.create_connection(("1.1.1.1", 443), timeout=1.5)
+        ip = s.getsockname()[0]   # the Pi's source IP on the route out
+        s.close()
+        return True, ip
+    except OSError:
+        return False, None
+
+
+@app.get("/api/v1/net")
+def net():
+    """Internet reachability for the top-bar indicator. Online == phone tethering
+    is sharing data (Vast works); offline == local-only capture mode. Cached so
+    rapid polls don't each open a socket."""
+    now = time.time()
+    if now - _net_cache["t"] > 8:
+        online, ip = _check_online()
+        _net_cache.update(t=now, online=online, ip=ip)
+    return {"online": _net_cache["online"], "ip": _net_cache["ip"]}
 
 
 @app.get("/api/v1/state")
