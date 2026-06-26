@@ -82,28 +82,35 @@ owns the channel. Notes on why each is needed:
 - **`DOWN_IFACE=wlan0`** — leaving `wlan0` up pins the radio's channel and
   starves the hopping monitor vif (scans come back empty).
 
-#### Reaching the UI from the phone — Ethernet tethering
+#### Reaching the UI from the phone
 
 Connect the Pi to the phone with a **plain micro-USB↔USB-C cable** (the phone is
-the USB host and powers the Pi). Then on the phone turn on **Settings → Network &
-internet → Hotspot & tethering → Ethernet tethering**, keeping **mobile data ON**.
+the USB host and powers the Pi — no power bank, see Power). The Pi presents as a
+CDC-NCM USB-Ethernet device. There are two ways to reach it, and the
+`pitail-uplink-monitor` service switches between them automatically:
 
-The Pi presents as a CDC-NCM USB-Ethernet device, and "Ethernet tethering" makes
-the **phone** the gateway / DHCP / NAT on that link. The Pi runs a DHCP *client*
-(`pitail-uplink-monitor.service`), accepts the phone's address, and **pushes the
-URL to open to ntfy** — e.g. `✅ Pi ONLINE — open http://10.21.224.60:8080`.
-Open that phone-assigned IP (normally stable per phone). With this one toggle the
-phone keeps mobile data, reaches the UI, **and** the Pi gets the internet the
-Vast.ai cracking needs — all at once.
+**Local-only — offline capture, no tethering (default).** Just plug in. The Pi
+serves the phone an address, so with the phone's **mobile data/Wi-Fi off** you
+open **`http://192.168.42.254:8080`** and run scans, handshakes, PMKID and deauth
+captures. Everything *except* Vast.ai cracking works here — no internet needed.
 
-> **Why the toggle, and why is the Pi's DHCP server off?** With mobile data on,
-> Android refuses to route the browser to a USB network that has no internet of
-> its own, so a plain plug-in won't load. Ethernet tethering flips the roles (the
-> phone owns the link), which fixes reachability *and* feeds the Pi internet. The
-> Pi's own DHCP server (`pi-netzero-usb-dhcp`) is therefore left **disabled** — if
-> it runs, Android sees a conflicting subnet and nothing connects. The static
-> `192.168.42.254` is only for a directly-wired laptop (set it static to
-> `192.168.42.129/24`).
+**Tethered — full use with mobile data ON.** Turn on **Settings → Network &
+internet → Hotspot & tethering → Ethernet tethering** (keep mobile data on). The
+**phone** now owns the link (DHCP + gateway + NAT): the Pi steps its own DHCP
+server aside, accepts the phone's address, and **pushes the URL to open to ntfy**
+— e.g. `✅ Pi ONLINE — open http://10.21.224.60:8080` (a phone-assigned IP,
+normally stable per phone). The phone keeps mobile data, reaches the UI, **and**
+the Pi gets the internet Vast.ai needs.
+
+> **Why two modes?** With mobile data ON, Android refuses to route the browser to
+> a USB network that has no internet of its own — so a plain plug-in won't load
+> with data on. Tethering fixes that by making the phone own the link (and feeds
+> the Pi internet as a bonus); with data OFF the USB link is the only network, so
+> simple local-only mode works. The Pi must *not* run its own DHCP server *during*
+> tethering (Android would pick a conflicting subnet and nothing connects), so the
+> monitor stops it automatically while tethered and restarts it after. The static
+> `192.168.42.254` is also the address for a directly-wired laptop (laptop side
+> static `192.168.42.129/24`).
 
 > **Gadget protocol & a dead end.** `pi-tail-ncm.service` swaps Pi-Tail's stock
 > `g_ether` (whose RNDIS config modern Android can't drive — it shows only
@@ -135,8 +142,11 @@ The phone then reaches the UI at **http://10.55.0.1**.
 1. Connect the Pi to your phone with a plain micro-USB↔USB-C cable (Pi's inner
    **USB** port, not `PWR`). On **Pi-Tail** the phone powers the Pi — **no power
    bank** (a second 5 V source on the Zero's shared rail drops the link); see Power.
-2. **Pi-Tail:** turn on **Ethernet tethering** (mobile data ON) and open the
-   `http://<ip>:8080` from the ntfy push. **Plain image:** open **http://10.55.0.1**.
+2. Open the UI:
+   - **Pi-Tail, offline capture** (no internet): mobile data off → **http://192.168.42.254:8080**.
+   - **Pi-Tail, with internet** (Vast): turn on **Ethernet tethering** (data ON) →
+     open the `http://<ip>:8080` from the ntfy push.
+   - **Plain image:** **http://10.55.0.1**.
 3. **Scan Networks** → tap a network to target it → **Scan Clients**,
    **Handshake**, **PMKID**, or **Deauth**. Captures appear in the Captures
    panel as downloadable `.pcap` files.

@@ -1,46 +1,53 @@
 #!/bin/bash
-# Uplink manager + monitor for the phone link (usb0).
+# Uplink manager for the phone link (usb0). Two modes, switched automatically:
 #
-# The Pi's own DHCP server is disabled, so when you switch ON tethering the PHONE
-# becomes the DHCP server + gateway + NAT. This grabs that lease with dhclient
-# (fresh each time — no stale renew), confirms real internet, pushes the result
-# to ntfy, AND writes a detailed diagnostic trail to /opt/pi-netzero/uplink.log
-# so a connection can be debugged after the fact. Only ever touches usb0.
+#   * LOCAL-ONLY (default): no tethering -> the Pi serves DHCP (dnsmasq) so a
+#     plugged-in phone gets an address and can reach the UI at 192.168.42.254 for
+#     offline work (scan / handshake / PMKID / capture). No internet required.
+#   * TETHERED: you switch ON "Ethernet tethering" on the phone -> the PHONE
+#     becomes DHCP server + gateway + NAT. The monitor STOPS its own DHCP server
+#     (so the Pi's dhclient hears the phone, not itself), grabs the phone's lease
+#     (giving the Pi internet for Vast.ai), and pushes the URL to open to ntfy.
+#
+# It probes for tethering ~every 60s by briefly stopping its DHCP server and
+# asking for a lease; an active local-only phone keeps its address across that
+# blip (the lease is held client-side). Only ever touches usb0; never wlan0/mon0.
 LOG=/opt/pi-netzero/uplink.log
 TOPIC=$(cat /opt/pi-netzero/ntfy.topic 2>/dev/null)
+DHCP=pi-netzero-usb-dhcp.service
 log(){ echo "$(date '+%F %T') | $*" >> "$LOG" 2>/dev/null; logger -t pitail-uplink "$*"; }
 push(){ log "PUSH: $1"; [ -n "$TOPIC" ] && curl -s -m 6 -H "Title: pi-netzero uplink" -d "$1" "https://ntfy.sh/$TOPIC" >/dev/null 2>&1 || true; }
 online(){ curl -s -m 5 -o /dev/null https://1.1.1.1 2>/dev/null; }
+serve_on(){  systemctl is-active --quiet "$DHCP" || { systemctl start "$DHCP" 2>/dev/null && log "local-only: DHCP server ON (phone -> http://192.168.42.254:8080)"; }; }
+serve_off(){ systemctl is-active --quiet "$DHCP" && { systemctl stop  "$DHCP" 2>/dev/null && log "tethered: DHCP server OFF (phone owns the link)"; }; }
 
 log "===== monitor (re)started ====="
 prev=init
+n=0
 while true; do
-  # keep the Pi's stable .254 for direct/laptop access (coexists with a lease)
-  ip addr add 192.168.42.254/24 dev usb0 2>/dev/null || true
+  ip addr add 192.168.42.254/24 dev usb0 2>/dev/null || true   # keep the stable local address
   state=down
   if online; then
+    serve_off                                    # tethered with internet
     state=up
   elif ip link show usb0 up >/dev/null 2>&1; then
-    log "OFFLINE — asking the phone for a fresh lease on usb0"
-    ip route flush default 2>/dev/null || true                       # drop any dead default
-    rm -f /var/lib/dhcp/dhclient.usb0.leases /var/lib/dhcp/dhclient.leases 2>/dev/null  # force fresh DISCOVER
-    timeout 15 dhclient -1 -v usb0 >>"$LOG" 2>&1 || true
-    GW=$(ip route show default 2>/dev/null | grep -oE 'via [0-9.]+' | awk '{print $2}' | head -1)
-    log "  usb0   = $(ip -4 -br addr show usb0)"
-    log "  routes = $(ip route show default 2>/dev/null | tr '\n' ';')"
-    if [ -n "$GW" ]; then ping -c1 -W2 "$GW" >/dev/null 2>&1 && log "  ping gw $GW = OK" || log "  ping gw $GW = FAIL"; else log "  (no gateway leased)"; fi
-    ping -c1 -W2 1.1.1.1 >/dev/null 2>&1 && log "  ping 1.1.1.1 = OK" || log "  ping 1.1.1.1 = FAIL"
-    online && state=up
-    log "  => online=$state"
+    if [ $((n % 6)) -eq 0 ]; then                # ~every 60s: look for fresh tethering
+      serve_off
+      ip route flush default 2>/dev/null || true
+      rm -f /var/lib/dhcp/dhclient.usb0.leases /var/lib/dhcp/dhclient.leases 2>/dev/null
+      timeout 10 dhclient -1 usb0 >>"$LOG" 2>&1 || true
+      if online; then state=up; else serve_on; fi # got tether internet, else back to local-only
+    else
+      serve_on                                   # local-only: keep serving the phone
+    fi
+    n=$((n + 1))
   fi
   if [ "$state" != "$prev" ]; then
     if [ "$state" = up ]; then
       ip=$(ip route get 1.1.1.1 2>/dev/null | grep -oE 'src [0-9.]+' | awk '{print $2}')
       gw=$(ip route show default 2>/dev/null | grep -oE 'via [0-9.]+' | awk '{print $2}' | head -1)
       vast=$(curl -s -m 8 -o /dev/null -w '%{http_code}' https://console.vast.ai/api/v0/ 2>/dev/null)
-      push "✅ Pi ONLINE — open http://${ip}:8080 on the phone · internet via gw ${gw} · Vast HTTP ${vast}"
-    elif [ "$prev" != init ]; then
-      push "⚠️ Pi offline"
+      push "✅ Pi ONLINE (tethered) — open http://${ip}:8080 on the phone · internet via gw ${gw} · Vast HTTP ${vast}"
     fi
     prev=$state
   fi

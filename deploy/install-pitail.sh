@@ -47,13 +47,13 @@ if [ -f "$IFACES" ] && grep -q '^allow-hotplug wlan0' "$IFACES"; then
 fi
 systemctl mask wpa_supplicant >/dev/null 2>&1 || true
 
-# usb0 DHCP *server* (dnsmasq): installed but LEFT DISABLED on purpose. The phone
-# reaches the Pi via Ethernet tethering, where the *phone* is the DHCP server +
-# gateway; a second DHCP server on this link makes Android pick a conflicting
-# subnet and nothing connects. The Pi instead runs a DHCP *client* (the uplink
-# monitor) to accept the phone's address. Enable this only for direct PC use
-# without a static IP:  sudo systemctl enable --now pi-netzero-usb-dhcp
-echo "[*] Installing usb0 DHCP server config (left disabled — see note)"
+# usb0 DHCP server (dnsmasq) = LOCAL-ONLY mode. With no tethering it hands a
+# plugged-in phone an address so it can reach the UI at 192.168.42.254 for offline
+# work (scan/capture). The uplink monitor automatically STOPS it the moment you
+# turn on Ethernet tethering (so the phone owns DHCP and feeds the Pi internet)
+# and restarts it when tethering is off — so a stray second DHCP server never
+# fights Android's tethering.
+echo "[*] Installing usb0 DHCP server (local-only mode; monitor toggles it)"
 install -m 644 "$APP/deploy/dnsmasq-usb0-pitail.conf" /etc/dnsmasq-usb0.conf
 install -m 644 "$APP/deploy/pi-netzero-usb-dhcp.service" /etc/systemd/system/
 
@@ -85,8 +85,7 @@ fi
 echo "[*] Installing + enabling the app service"
 install -m 644 "$APP/deploy/pi-netzero-pitail.service" /etc/systemd/system/pi-netzero.service
 systemctl daemon-reload
-systemctl disable pi-netzero-usb-dhcp.service 2>/dev/null || true   # off: conflicts with Ethernet tethering
-systemctl enable pi-netzero.service pi-tail-ncm.service pitail-uplink-monitor.service
+systemctl enable pi-netzero.service pi-netzero-usb-dhcp.service pi-tail-ncm.service pitail-uplink-monitor.service
 
 cat <<'EOF'
 
